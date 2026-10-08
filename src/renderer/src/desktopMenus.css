@@ -1,0 +1,29 @@
+.desktop-menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 18px;
+  -webkit-app-region: no-drag;
+}
+.desktop-menu-bar > button {
+  padding: 7px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #657286;
+  white-space: nowrap;
+}
+.desktop-menu-bar > button:hover,
+.desktop-menu-bar > button.active {
+  background: #eaf0f5;
+  color: #34465e;
+}
+.desktop-menu-bar > button:focus-visible {
+  outline: 2px solid #f2536480;
+  outline-offset: 1px;
+}
+@media (max-width: 1200px) {
+  .titlebar:has(.desktop-menu-bar) .brand-caption,
+  .titlebar:has(.desktop-menu-bar) .brand-divider { display: none; }
+  .desktop-menu-bar { margin-left: 12px; }
+  .desktop-menu-bar > button { padding-inline: 7px; }
+}

@@ -1,0 +1,37 @@
+.structured-tables-panel{border:1px solid #dfe7e4;background:#fff;border-radius:12px;padding:21px;min-width:0;color:#405665}
+.structured-tables-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.structured-tables-eyebrow{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:1.3px;color:#69847a;font-weight:600}
+.structured-tables-heading h3{font:400 23px Georgia,'Times New Roman',serif;margin:9px 0 0;color:#344e49}
+.structured-tables-local{font-size:9px;white-space:nowrap;background:#edf5f1;color:#577a6a;padding:6px 9px;border-radius:18px}
+.structured-tables-description{font-size:11px;line-height:1.75;color:#77858c;margin:14px 0}
+.structured-tables-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.structured-tables-panel button{display:inline-flex;align-items:center;gap:6px;border:1px solid #d6e4dd;background:#f3f8f5;color:#487360;border-radius:6px;padding:7px 10px;font-size:10px;cursor:pointer}
+.structured-tables-panel button:disabled{opacity:.45;cursor:default}
+.structured-tables-controls small{font-size:9px;line-height:1.6;color:#8c9a96}
+.structured-tables-status,.structured-tables-error,.structured-tables-partial{font-size:11px;line-height:1.7;padding:10px 12px;border-radius:7px;background:#f2f6f4;color:#62796e}
+.structured-tables-error,.structured-tables-partial{background:#fff7eb;color:#956d3b}
+.structured-tables-coverage{display:flex;flex-wrap:wrap;gap:5px 15px;font-size:10px;padding:17px 0 10px;color:#8a9994}
+.structured-tables-coverage strong{font-weight:550;color:#557967}
+.structured-tables-textless,.structured-tables-empty{font-size:10px;line-height:1.8;color:#82908c}
+.structured-tables-textless button{padding:2px 5px;margin:0 3px}
+.structured-tables-list{display:grid;gap:11px;margin-top:13px;min-width:0}
+.structured-table-card{border:1px solid #e0e9e3;border-radius:8px;min-width:0;overflow:hidden}
+.structured-table-card>summary{padding:12px 13px;background:#f5f9f6;cursor:pointer;font-size:11px;color:#4b6f5e}
+.structured-table-card>summary strong{font-weight:600;margin-right:12px}
+.structured-table-card>summary>span{font-size:9px;line-height:1.8;color:#88978e}
+.structured-table-content{padding:13px;min-width:0}
+.structured-table-actions{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.structured-table-scroll{max-height:380px;max-width:100%;overflow:auto;border:1px solid #e7ede9;border-radius:6px}
+.structured-table-scroll table{border-collapse:collapse;width:100%;font-size:11px;line-height:1.65;min-width:300px;font-variant-numeric:tabular-nums}
+.structured-table-scroll th,.structured-table-scroll td{border-bottom:1px solid #eaf0ed;padding:9px 12px;vertical-align:top;white-space:pre-wrap;min-width:88px;text-align:right;color:#50645b}
+.structured-table-scroll th:first-child{min-width:100px;text-align:left}
+.structured-table-scroll thead th{background:#eef5f0;position:sticky;top:0;color:#416451;font-weight:550}
+.structured-table-scroll thead th small{display:block;font-size:9px;font-weight:400;color:#7d9787;margin-top:2px}
+.structured-table-scroll tbody th{font-weight:450}.structured-table-scroll tbody tr:nth-child(even){background:#fafcfb}
+.structured-table-note{font-size:10px;line-height:1.7;color:#86938c;margin:9px 0}
+.structured-table-original{margin-top:11px;font-size:10px;color:#8a9890}.structured-table-original>summary{cursor:pointer}
+.structured-table-original pre{white-space:pre-wrap;overflow-wrap:anywhere;font:10px/1.8 inherit;color:#667a6d;max-height:200px;overflow:auto;padding:10px 0;margin:4px 0}
+.structured-tables-limits{font-size:9px;line-height:1.8;color:#98a39c;margin:16px 0 0}
+.structured-tables-panel button:focus-visible,.structured-tables-panel summary:focus-visible,.structured-table-scroll:focus-visible{outline:2px solid #91b19e;outline-offset:2px}
+.structured-table-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1100px){.structured-tables-panel{padding:15px}.structured-tables-heading{flex-wrap:wrap}.structured-tables-heading h3{font-size:21px}.structured-table-content{padding:10px}}

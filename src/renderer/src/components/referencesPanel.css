@@ -1,0 +1,27 @@
+.references-panel{min-width:0;padding:19px;border:1px solid #e0e6e8;border-radius:11px;background:#fff;color:#3e5263}
+.references-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.references-heading h3{font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:400;margin:7px 0 0}
+.references-eyebrow{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.3px;color:#718091}
+.references-local{font-size:9px;padding:5px 8px;border-radius:14px;background:#f0f4f6;color:#637b8b;white-space:nowrap}
+.references-description{font-size:11px;line-height:1.8;color:#74818e;margin:13px 0}
+.references-controls,.reference-actions,.reference-pages{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.references-controls small,.reference-fields-hint{font-size:10px;color:#87929c;line-height:1.7}
+.references-panel button{display:inline-flex;align-items:center;justify-content:center;gap:5px;border:1px solid #d9e2e6;border-radius:6px;background:#f6f9fa;padding:7px 9px;font-size:10px;color:#536e7b;max-width:100%;white-space:normal}
+.references-panel button:disabled{opacity:.45;cursor:default}
+.references-panel button:focus-visible,.references-panel summary:focus-visible{outline:2px solid #92b4a9;outline-offset:3px}
+.references-status,.references-warning,.references-error{padding:9px 11px;border-radius:7px;background:#f3f6f7;font-size:11px;line-height:1.7;color:#637a86;overflow-wrap:anywhere}
+.references-warning,.references-error{background:#fff7eb;color:#956e39}
+.references-empty{font-size:11px;color:#7e8c96;line-height:1.7;margin-bottom:0}
+.references-list{display:grid;gap:12px;margin-top:15px;min-width:0}
+.reference-card{min-width:0;border:1px solid #e5eaec;border-radius:9px;padding:14px;background:#fdfefe}
+.reference-card-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:11px}
+.reference-status{font-size:9px;color:#87929a;border-radius:12px;background:#f0f3f4;padding:4px 7px}
+.reference-status-matched{background:#edf5f0;color:#47765f}.reference-status-conflict,.reference-status-ambiguous{background:#fff3e4;color:#966b34}
+.reference-fields{display:grid;grid-template-columns:53px minmax(0,1fr);gap:6px 10px;font-size:11px;line-height:1.65;margin:13px 0 8px}
+.reference-fields dt{color:#8b959d}.reference-fields dd{margin:0;color:#4a6070;overflow-wrap:anywhere;white-space:pre-wrap}
+.reference-original{font-size:10px;margin:11px 0}.reference-original summary{cursor:pointer;color:#6e818b}.reference-original p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font-size:11px;line-height:1.8;color:#687985;padding:8px;background:#f5f7f8;border-radius:5px}
+.reference-actions{justify-content:space-between;margin-top:12px}.reference-pages{font-size:9px;color:#8e9ba2;gap:4px}.reference-pages button{padding:3px 6px}
+.reference-verification{margin-top:13px;border-top:1px solid #e8edef;padding-top:12px;font-size:11px;line-height:1.7;color:#6c7c86;min-width:0}.reference-verification>small{font-size:9px;color:#8c979e}
+.reference-candidate{margin-top:9px;padding:9px;border:1px solid #e3e9eb;border-radius:6px;background:#f6f9fa;min-width:0}.reference-candidate summary{cursor:pointer;overflow-wrap:anywhere;font-size:10px;color:#5d7481}.reference-candidate ul{padding-left:18px;font-size:10px;overflow-wrap:anywhere;margin-bottom:0}
+.references-more{margin-top:12px}
+@media(max-width:1100px){.references-panel{padding:13px}.reference-card{padding:10px}.reference-fields{grid-template-columns:45px minmax(0,1fr);gap:5px 7px}.references-heading h3{font-size:20px}}

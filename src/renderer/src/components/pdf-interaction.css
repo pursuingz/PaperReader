@@ -1,0 +1,9 @@
+.pdf-interaction-layer{position:absolute;inset:0;z-index:8;touch-action:none;user-select:none;overflow:hidden}
+.pdf-interaction-layer.hand{cursor:grab}.pdf-interaction-layer.hand.dragging{cursor:grabbing}
+.pdf-interaction-layer.capture{cursor:crosshair}.pdf-interaction-layer.capture.waiting{cursor:wait}
+.pdf-capture-hint{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:6px;padding:7px 10px;background:#fffdf3e8;border:1px solid #eddfc5;border-radius:6px;color:#9f8055;font-size:10px;pointer-events:none;box-shadow:0 2px 8px #26324509}
+.pdf-capture-selection{position:absolute;border:1.5px solid #e95b72;background:#f2536410;box-shadow:0 0 0 10000px #26324520;pointer-events:none}
+.pdf-capture-error{position:absolute;top:48px;left:10px;right:10px;font-size:10px;color:#a06b49;background:#fff8ed;padding:8px;border-radius:5px;pointer-events:none}
+.pdf-capture-confirm{position:fixed;z-index:91;display:flex;align-items:center;flex-wrap:wrap;gap:5px;max-width:calc(100vw - 20px);padding:6px;background:#fffffff7;border:1px solid #eedce2;border-radius:9px;box-shadow:0 5px 20px #2632451c;color:#8390a0;font-size:10px;backdrop-filter:blur(8px)}
+.pdf-capture-confirm>span{padding:0 6px;white-space:nowrap}.pdf-capture-confirm>button{padding:8px 9px;border-radius:5px;font-size:10px;gap:5px;white-space:nowrap}
+.pdf-capture-confirm>button:first-of-type{background:#fff0f2;color:#d45369}.pdf-capture-confirm>button:first-of-type:hover{background:#ffe5ea}.pdf-capture-confirm>p{flex-basis:100%;max-width:310px;margin:2px 5px 3px;color:#a06b49;font-size:10px;line-height:1.5}

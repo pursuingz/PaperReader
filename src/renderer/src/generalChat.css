@@ -1,0 +1,71 @@
+.welcome.has-general-chat { padding: 22px 30px; }
+.has-general-chat .welcome-content { align-items: stretch; min-height: 360px; gap: 26px; padding: 22px 0; }
+.has-general-chat .welcome-copy { flex: 0 1 35%; min-width: 195px; align-self: center; }
+.has-general-chat .welcome-copy h1 { font-size: clamp(37px, 3.7vw, 53px); margin: 18px 0; }
+.has-general-chat .welcome-copy > p { font-size: 11px; margin-bottom: 22px; }
+.has-general-chat .welcome-copy > p br { display: none; }
+.has-general-chat .welcome-actions { flex-wrap: wrap; gap: 5px; }
+.has-general-chat .welcome-features { padding: 17px 0 12px; }
+.has-general-chat .welcome-features p { font-size: 10px; }
+.has-general-chat .welcome-footer { padding-top: 12px; }
+.welcome-chat-slot { flex: 1; min-width: 0; display: flex; }
+.general-chat-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid #e6eaf0; border-radius: 12px; background: #fbfcfd; box-shadow: 0 8px 28px #26324505; overflow: hidden; }
+.general-chat-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 17px 11px; background: #fff; flex-shrink: 0; }
+.general-chat-header > div { display: flex; align-items: center; gap: 10px; }
+.general-chat-mark { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: #fff0f2; color: var(--coral); border-radius: 9px; }
+.general-chat-header h2 { margin: 0; font: 22px Georgia, serif; letter-spacing: -.55px; }
+.general-chat-header p { margin: 5px 0 0; font-size: 9px; color: #8a95a5; }
+.general-chat-model { display: flex; align-items: center; gap: 6px; padding: 0 18px 11px; background: #fff; border-bottom: 1px solid var(--line); font-size: 9px; color: #8190a2; flex-shrink: 0; }
+.general-chat-model > span:last-child { margin-left: auto; font-size: 8px; color: #a1abb8; }
+.general-chat-messages { flex: 1; min-height: 160px; max-height: 480px; overflow-y: auto; overflow-x: hidden; padding: 13px 17px; scrollbar-gutter: stable; }
+.general-chat-empty { min-height: 170px; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; color: #8793a4; padding: 17px 0; }
+.general-chat-empty > svg { color: #e0a5ae; margin-bottom: 8px; }
+.general-chat-empty h3 { color: #586679; font: 18px Georgia, serif; margin: 8px 0; }
+.general-chat-empty p { font-size: 11px; line-height: 1.85; margin: 4px 0 14px; }
+.general-chat-empty small { font-size: 9px; line-height: 1.6; }
+.general-chat-loading { font-size: 11px; color: #8793a4; }
+.general-chat-message { padding: 11px 12px; background: #fff; border: 1px solid #edf0f5; border-radius: 9px; margin-bottom: 11px; overflow-wrap: anywhere; }
+.general-chat-message.user { background: #fff6f7; border-color: #fce7eb; }
+.general-chat-message-label { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 9px; color: #8793a4; }
+.general-chat-message-label strong { font-weight: 650; color: #637084; }
+.general-chat-message-label small { font-size: 8px; color: #b57b86; }
+.general-chat-message-label time { margin-left: auto; font-size: 8px; color: #a3adbb; }
+.general-chat-question { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.8; }
+.general-chat-message .markdown-content { font-size: 12px; }
+.general-chat-message-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.general-chat-message-actions > small { color: #929dab; font-size: 9px; }
+.general-chat-message-actions .request-retry button { font-size: 9px; color: #798697; background: #fff; border-color: #e4e9f0; padding: 4px 6px; }
+.general-chat-message-actions .request-retry small { font-size: 8px; color: #9aa5b4; }
+.general-chat-preview { border-color: #f7d9df; background: #fffafb; }
+.general-chat-preview > p { font-size: 11px; color: #99a3b1; }
+.general-chat-feedback { flex-shrink: 0; padding: 0 17px; font-size: 9px; color: #8f9bab; line-height: 1.6; }
+.general-chat-feedback > p { margin: 3px 0; color: #a15462; overflow-wrap: anywhere; }
+.general-chat-feedback button { color: #d85669; font-size: 9px; text-decoration: underline; padding: 3px 0; margin-right: 9px; }
+.general-chat-history-error { color: #a15462; overflow-wrap: anywhere; }
+.general-chat-connect { display: block; }
+.general-chat-composer { flex-shrink: 0; display: grid; grid-template-columns: minmax(0,1fr) 30px; gap: 6px 9px; padding: 11px 12px 8px; margin: 7px 12px 0; border: 1px solid #e2e7ef; border-radius: 8px; background: #fff; }
+.general-chat-composer textarea { width: 100%; min-width: 0; resize: vertical; max-height: 110px; min-height: 42px; border: 0; background: none; font-size: 11px; line-height: 1.65; padding: 1px 2px; }
+.general-chat-composer textarea::placeholder { color: #a6b0bd; }
+.general-chat-composer > button { align-self: end; height: 30px; width: 30px; border-radius: 7px; }
+.general-chat-send { background: var(--coral); color: #fff; }
+.general-chat-send:hover:enabled { background: #e6495a; }
+.general-chat-cancel { background: #fff0f2; color: #cf5265; border: 1px solid #f6d5dc; }
+.general-chat-composer small { grid-column: 1 / -1; font-size: 8px; color: #a6afbb; }
+.general-chat-disclosure { flex-shrink: 0; font-size: 8px; color: #a3adbb; line-height: 1.65; padding: 0 17px; margin: 8px 0 11px; }
+@media (max-width: 1150px) {
+  .welcome.has-general-chat { padding: 19px 21px; }
+  .has-general-chat .welcome-content { gap: 17px; padding: 17px 0; }
+  .has-general-chat .welcome-copy { flex-basis: 31%; min-width: 180px; }
+  .has-general-chat .welcome-copy h1 { font-size: 39px; }
+  .has-general-chat .welcome-copy .eyebrow { font-size: 7px; letter-spacing: 1px; }
+  .general-chat-header { padding: 14px 13px 10px; }
+  .general-chat-header h2 { font-size: 20px; }
+  .general-chat-model { padding-left: 14px; padding-right: 14px; }
+  .general-chat-messages { padding: 11px 12px; }
+  .general-chat-model > span:last-child { display: none; }
+}
+@media (max-height: 760px) {
+  .has-general-chat .welcome-features { display: none; }
+  .has-general-chat .welcome-content { padding: 16px 0; min-height: 340px; }
+  .general-chat-messages { min-height: 135px; }
+}

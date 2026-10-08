@@ -1,0 +1,22 @@
+.history-controls { display: flex; align-items: center; gap: 2px; -webkit-app-region: no-drag; }
+.history-controls .icon-button { width: 28px; height: 28px; }
+.history-controls .icon-button:disabled { opacity: .3; cursor: default; }
+.focus-toggle.active { color: #e7566d; background: #fff0f2; }
+.reading-focus .workspace { grid-template-columns: minmax(0, 1fr); }
+.reading-focus .sidebar, .reading-focus .assistant-panel, .reading-focus .resize-handle, .reading-focus .composer { display: none; }
+.reading-focus .main-workspace { width: 100%; min-width: 0; }
+.reading-focus .reading-grid { grid-template-columns: minmax(0, 1fr) !important; }
+.reading-focus .assistant-toggle { display: none; }
+.reading-focus .reading-pane { border-radius: 0; }
+.reading-focus .focus-toggle { min-width: 32px; }
+.app-help-dialog { width: min(620px, calc(100vw - 48px)); max-height: calc(100vh - 80px); padding: 28px; background: #fffdfb; border: 1px solid #e4e9ee; border-radius: 16px; box-shadow: 0 24px 80px #26354a22; overflow: auto; }
+.app-help-dialog header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.app-help-dialog h2 { font-family: Georgia, serif; font-weight: 400; font-size: 28px; color: #23354d; margin: 0; }
+.app-help-dialog p, .app-help-dialog li { line-height: 1.8; color: #58677b; font-size: 13px; }
+.app-help-dialog ol { padding-left: 22px; }
+.app-help-dialog dl { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px 20px; color: #58677b; font-size: 12px; }
+.app-help-dialog dt { font-weight: 600; color: #24354d; }
+.app-help-dialog dd { margin: 0; }
+.app-help-dialog footer { margin-top: 22px; padding-top: 16px; border-top: 1px solid #e4e9ee; font-size: 11px; color: #8b97a7; }
+@media (max-width: 1250px) { .titlebar .brand-caption, .titlebar .brand-divider { display: none; } }
+@media (max-width: 1100px) { .titlebar .brand { gap: 6px; } .desktop-menu-bar { margin-left: 4px; } }

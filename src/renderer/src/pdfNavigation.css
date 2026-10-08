@@ -1,0 +1,41 @@
+.reader-body{display:flex;flex:1;min-width:0;min-height:0;position:relative;overflow:hidden}
+.reader-body>.reader-content{min-width:0}
+.pdf-navigation{width:210px;max-width:100%;flex:0 0 210px;min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--line);background:#fbfcfe;color:#64748b;z-index:5;overflow:hidden}
+.pdf-navigation-heading{display:flex;align-items:center;justify-content:space-between;padding:10px 10px 7px;gap:10px;flex-shrink:0}
+.pdf-navigation-heading>strong{font-size:12px;font-weight:600;color:#536074}
+.pdf-navigation-heading>.icon-button{width:25px;height:25px}
+.pdf-navigation-modes{display:flex;gap:4px;margin:0 9px 8px;padding:3px;background:#eef2f6;border-radius:6px;flex-shrink:0}
+.pdf-navigation-modes>button{flex:1;gap:5px;padding:6px 4px;border-radius:4px;font-size:10px;color:#7c899b}
+.pdf-navigation-modes>button[aria-pressed=true]{background:#fff;color:#c45c70;box-shadow:0 1px 4px #33455c0a}
+.pdf-navigation button:focus-visible,.pdf-navigation summary:focus-visible{outline:2px solid #e4a4b3;outline-offset:-2px}
+.pdf-navigation-empty{font-size:11px;line-height:1.7;padding:12px;margin:0;overflow-wrap:anywhere}
+.pdf-navigation-empty button{border:1px solid #e2dce2;border-radius:5px;padding:7px 9px;font-size:10px;color:#b56678;background:white}
+.pdf-outline{flex:1;min-height:0;overflow:auto;padding:3px 8px 12px}
+.pdf-outline-list{list-style:none;padding:0;margin:0;font-size:11px;line-height:1.6}
+.pdf-outline-list .pdf-outline-list{margin-left:9px;padding-left:8px;border-left:1px solid #e7ebf1}
+.pdf-outline-list>li{min-width:0;margin:2px 0}
+.pdf-outline-list summary{cursor:pointer;padding:7px 4px;border-radius:4px;color:#536074;overflow-wrap:anywhere}
+.pdf-outline-list summary::marker{color:#a1adbb;font-size:9px}
+.pdf-outline-destination{width:100%;justify-content:flex-start;text-align:left;padding:7px 6px;border-radius:5px;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.pdf-outline-destination:hover{background:#f2f5f9}
+.pdf-outline-destination[aria-current=page]{background:#fff0f3;color:#b95c71}
+.pdf-outline-parent-target{padding-left:14px}
+.pdf-outline-parent-target .pdf-outline-destination{font-size:10px;color:#b16d7d}
+.pdf-outline-unavailable{display:block;padding:7px 6px;color:#8a96a6;overflow-wrap:anywhere}
+.pdf-outline-unavailable>small{display:block;font-size:9px;color:#a0aab8}
+.pdf-thumbnails{display:flex;flex-direction:column;flex:1;min-height:0}
+.pdf-thumbnail-controls{display:flex;align-items:center;justify-content:space-between;padding:2px 10px 7px;gap:4px;flex-shrink:0}
+.pdf-thumbnail-controls .icon-button{width:25px;height:25px}
+.pdf-thumbnail-range{font-size:10px;color:#8a97a8}
+.pdf-thumbnail-scroll{overflow:auto;flex:1;min-height:0;padding:4px 12px 12px;display:flex;flex-direction:column;align-items:stretch;gap:9px}
+.pdf-thumbnail{padding:8px 5px 6px;display:flex;flex-direction:column;gap:6px;border:1px solid transparent;border-radius:7px;flex-shrink:0}
+.pdf-thumbnail:hover{background:#f0f4f8}
+.pdf-thumbnail.selected{background:#fff2f5;border-color:#e9a8b6}
+.pdf-thumbnail-preview{display:flex;align-items:center;justify-content:center;min-height:156px;width:100%}
+.pdf-thumbnail-canvas{display:block;max-width:120px;max-height:156px;background:#fff;box-shadow:0 1px 5px #33455c18}
+.pdf-thumbnail-canvas[hidden]{display:none}
+.pdf-thumbnail-placeholder{display:flex;align-items:center;justify-content:center;width:104px;height:156px;padding:8px;background:#f1f4f8;border:1px solid #e4eaf1;color:#96a2b2;font-size:10px;line-height:1.6}
+.pdf-thumbnail-label{font-size:10px;color:#8592a5}
+.pdf-thumbnail.selected .pdf-thumbnail-label{color:#b96376;font-weight:600}
+.pdf-navigation-status{flex-shrink:0;padding:8px 10px;margin:0;border-top:1px solid var(--line);font-size:9px;line-height:1.6;overflow-wrap:anywhere;color:#8b97a8;background:#fbfcfe}
+@container reading-pane (max-width:699px){.pdf-navigation{position:absolute;inset:0 auto 0 0;box-shadow:8px 0 20px #33455c18;border-right-color:#d8e0eb;width:min(230px,85%);max-width:85%}}

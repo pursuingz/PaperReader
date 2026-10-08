@@ -1,0 +1,38 @@
+{
+  "name": "paper-reader",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local AI-assisted paper reading workspace",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts tests/*.test.tsx src/renderer/src/*.test.ts",
+    "build": "electron-vite build",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "katex": "^0.16.47",
+    "lucide-react": "^0.468.0",
+    "pdf-lib": "1.17.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "react-pdf": "^10.2.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^40.0.0",
+    "electron-vite": "^5.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.0.0"
+  }
+}

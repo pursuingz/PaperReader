@@ -1,0 +1,31 @@
+.note-review-backdrop { position: fixed; inset: 0; z-index: 65; display: grid; place-items: center; padding: 24px; background: #23304465; backdrop-filter: blur(5px); }
+.note-review-dialog { width: min(960px, 100%); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; overflow: hidden; color: #26354b; background: #fffdfb; border: 1px solid #ebe5e1; border-radius: 18px; box-shadow: 0 24px 90px #24334838; }
+.note-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 24px 28px 0; }
+.note-review-header h2 { font-family: Georgia, 'Times New Roman', serif; font-size: 29px; font-weight: 400; letter-spacing: -.7px; margin: 9px 0 0; }
+.note-review-eyebrow { display: flex; align-items: center; gap: 7px; color: #ba6878; font-size: 10px; font-weight: 600; letter-spacing: 1.4px; }
+.note-review-description { flex: none; color: #6e7b8c; font-size: 12px; line-height: 1.65; margin: 11px 28px 20px; max-width: 700px; }
+.note-review-form { display: flex; flex-direction: column; min-height: 0; }
+.note-review-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 0 28px; min-height: 140px; }
+.note-review-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.note-review-pane-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.note-review-pane-heading strong { font-size: 13px; font-weight: 600; }
+.note-review-pane-heading small { color: #8390a0; font-size: 10px; white-space: nowrap; }
+.note-review-pane-hint { color: #7c8898; font-size: 10px; margin: 6px 0 10px; }
+.note-review-pane textarea { width: 100%; height: clamp(180px, 40dvh, 430px); min-height: 120px; padding: 16px; resize: none; overflow: auto; font-family: inherit; font-size: 13px; line-height: 1.8; color: #34435a; background: #f4f6f8; border: 1px solid #e2e7ed; border-radius: 10px; outline: none; tab-size: 2; }
+.note-review-pane textarea:focus-visible { border-color: #cbb5bd; box-shadow: 0 0 0 3px #f24d6810; }
+.note-review-pane.proposed textarea { background: #fff9fa; border-color: #f1dce2; }
+.note-review-pane.proposed textarea:focus-visible { border-color: #e49bab; }
+.note-review-pane textarea:disabled { opacity: .65; }
+.note-review-feedback { flex: none; min-height: 45px; padding: 11px 28px; }
+.note-review-feedback p { margin: 0; color: #7a8494; font-size: 11px; line-height: 1.55; }
+.note-review-feedback p[role='alert'], .note-review-feedback p[role='status'] { color: #a15c38; }
+.note-review-footer { flex: none; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 17px 28px; border-top: 1px solid #eee8e7; background: #faf8f6; }
+.note-review-footer > span { flex: 1; min-width: 150px; color: #87909d; font-size: 10px; line-height: 1.6; }
+.note-review-footer button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 38px; padding: 9px 15px; border: 1px solid transparent; border-radius: 8px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.note-review-footer .note-review-replace { border-color: #e1dce0; color: #67536a; background: #fffdfc; }
+.note-review-footer .note-review-append { background: #f34e68; color: white; box-shadow: 0 4px 11px #f34e681a; }
+.note-review-footer button:hover:not(:disabled) { filter: brightness(.97); }
+.note-review-footer button:focus-visible { outline: 2px solid #cf8293; outline-offset: 3px; }
+.note-review-footer button:disabled { opacity: .5; cursor: default; box-shadow: none; }
+@media (max-height: 760px) { .note-review-header { padding-top: 18px; } .note-review-description { margin-bottom: 14px; } .note-review-pane textarea { height: 34dvh; } }
+@media (max-width: 760px) { .note-review-backdrop { padding: 14px; } .note-review-dialog { max-height: calc(100dvh - 28px); } .note-review-header { padding-inline: 18px; } .note-review-description { margin-inline: 18px; } .note-review-columns { grid-template-columns: minmax(0, 1fr); overflow: auto; padding-inline: 18px; } .note-review-pane textarea { height: 180px; min-height: 180px; } .note-review-feedback, .note-review-footer { padding-inline: 18px; } }

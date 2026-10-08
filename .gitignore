@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+.cache/
+*.log
+.env
+.env.*
+
+# Minimal GitHub source selection; keep development materials locally.
+/tests/
+/scripts/*
+!/scripts/package.mjs
+/docs/*
+!/docs/2026-10-08-v020-guide.md

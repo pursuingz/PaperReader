@@ -1,0 +1,19 @@
+.pdf-search{flex-shrink:0;padding:8px 13px;border-bottom:1px solid var(--line);background:#fbfcfe;min-width:0}
+.pdf-search-form{display:flex;align-items:center;gap:6px;color:#8390a2;min-width:0}
+.pdf-search-form>input{min-width:30px;width:100%;flex:1;padding:6px 8px;border:1px solid #e1e6ed;border-radius:5px;background:white;font-size:11px}
+.pdf-search-submit{padding:6px 9px;border-radius:5px;background:#fff0f2;color:#cd5667;font-size:10px;flex-shrink:0}
+.pdf-search-form .icon-button{width:24px;height:25px}
+.pdf-search-status{font-size:9px;color:#8895a7;padding-top:5px;line-height:1.5}
+.pdf-search-coverage{font-size:9px;line-height:1.5;color:#9a754a;margin:4px 0 0}
+.pdf-search-results{list-style:none;margin:6px 0 0;padding:0;max-height:124px;overflow:auto;border:1px solid #e8ecf2;border-radius:5px;background:#fff}
+.pdf-search-results button{width:100%;padding:6px 8px;text-align:left;justify-content:flex-start;align-items:baseline;gap:8px;font-size:10px;line-height:1.5}
+.pdf-search-results button.selected{background:#fff0f2}
+.pdf-search-results button>strong{white-space:nowrap;color:#ce6372;font-size:9px;font-weight:600}
+.pdf-search-results button>span{min-width:0;color:#728097;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.react-pdf__Page__textContent mark.pdf-search-hit{color:transparent;background:#ffd55e88;border-radius:1px;box-shadow:0 0 0 1px #dca83260;padding:0}
+.pdf-page-entry{display:flex;align-items:center;gap:4px;position:relative;font-size:10px;flex-shrink:0}
+.pdf-page-entry>input{width:36px;padding:4px 2px;text-align:center;border:1px solid #e4e9f0;border-radius:4px;background:white;font-size:10px}
+.pdf-page-entry>span:not(.pdf-page-error){white-space:nowrap;color:#8e9aab}
+.pdf-page-go{font-size:9px;padding:4px;border-radius:4px;color:#ce6372}
+.pdf-page-error{position:absolute;z-index:15;top:30px;right:-30px;width:220px;padding:8px 10px;border:1px solid #f0e1c7;background:#fff9ee;color:#947746;border-radius:6px;box-shadow:0 3px 12px #26324512;line-height:1.5;text-align:left}
+@container reading-pane (max-width:460px){.pdf-search{padding:7px 9px}.pdf-search-form{gap:3px}.pdf-search-form>svg{display:none}.pdf-search-form .icon-button{width:22px}.pdf-page-entry{gap:2px}.pdf-page-entry>input{width:30px}}

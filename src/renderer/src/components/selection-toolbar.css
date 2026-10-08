@@ -1,0 +1,12 @@
+.selection-toolbar{position:fixed;z-index:90;display:flex;align-items:center;gap:2px;flex-wrap:wrap;width:max-content;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow:auto;padding:5px;background:#fffffff7;border:1px solid #eddfe3;border-radius:10px;box-shadow:0 5px 20px #3844571a,0 1px 4px #3844570a;backdrop-filter:blur(10px);user-select:none}
+.selection-toolbar>button{padding:8px 9px;gap:5px;border-radius:6px;font-size:10px;font-weight:550;line-height:1.2;color:#6e7c8e;white-space:nowrap;flex-shrink:0}
+.selection-toolbar>button:hover{background:#f3f5f8;color:#344358}
+.selection-toolbar>button:focus-visible{outline:2px solid #f2536499;outline-offset:-1px}
+.selection-toolbar>button.selection-explain{background:#fff0f2;color:#d45065}
+.selection-toolbar>button.selection-explain:hover{background:#ffe4e9}
+.selection-toolbar>button.selection-highlight{color:#a08235}
+.selection-toolbar>button.selection-highlight:hover{background:#fff7dc}
+.selection-toolbar-divider{width:1px;height:17px;background:#e8eaf0;margin:0 3px}
+.selection-toolbar>button.selection-toolbar-dismiss{padding:8px 5px;color:#a4aebb}
+.selection-toolbar>button:disabled{opacity:.42;cursor:default}
+@media(max-width:500px){.selection-toolbar>button{padding:8px 6px;font-size:9px}.selection-toolbar-divider{margin:0 1px}}

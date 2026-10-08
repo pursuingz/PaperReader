@@ -1,0 +1,12 @@
+.ink-tool { display: inline-flex; align-items: center; gap: 5px; color: #66778b; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px 6px; font-size: 10px; }
+.ink-tool.selected { color: #bf5369; background: #fff1f4; border-color: #f3d1d9; }
+.ink-toolbar { flex-wrap: wrap; }
+.ink-canvas.erasing, .pdf-ink-layer.drawing.erasing { cursor: cell; }
+.highlight-history { display: flex; align-items: center; gap: 5px; margin-bottom: 12px; color: #77869a; font-size: 10px; }
+.highlight-history > span { flex: 1; }
+.highlight-editing { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; }
+.highlight-color-choices { display: flex; gap: 8px; align-items: center; }
+.highlight-color-choices .highlight-swatch { width: 19px; height: 19px; padding: 0; border: 2px solid white; outline: 1px solid #d8dee7; border-radius: 50%; cursor: pointer; }
+.highlight-color-choices .highlight-swatch.selected { outline: 2px solid #526379; }
+.highlight-remove { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: #99707a; padding: 4px; font-size: 10px; }
+.highlight-remove:hover { color: #bf405c; }

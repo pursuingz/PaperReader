@@ -1,0 +1,12 @@
+.question-reuse-backdrop { position:fixed; inset:0; z-index:75; background:rgba(26,40,59,.32); display:grid; place-items:center; padding:24px; }
+.question-reuse-dialog { width:min(650px,100%); max-height:calc(100vh - 48px); overflow:auto; background:#fffdfa; border:1px solid #eadfdb; border-radius:20px; padding:28px; box-shadow:0 24px 80px #23304724; }
+.question-reuse-dialog h2 { margin:8px 0 12px; font-family:Georgia,serif; font-size:28px; font-weight:400; color:#22344c; }
+.question-reuse-dialog > p { font-size:13px; line-height:1.7; color:#728198; }
+.question-reuse-comparison { display:grid; gap:12px; margin:18px 0; }
+.question-reuse-comparison > div { background:#f3f6f9; border:1px solid #e3e9f0; border-radius:10px; padding:14px; min-width:0; }
+.question-reuse-comparison > div + div { background:#fff2f4; border-color:#f6dce2; }
+.question-reuse-comparison strong { font-size:12px; color:#354c66; }
+.question-reuse-comparison pre { white-space:pre-wrap; overflow-wrap:anywhere; font:13px/1.65 inherit; max-height:150px; overflow:auto; margin:8px 0 0; }
+.question-reuse-dialog footer { display:flex; justify-content:flex-end; gap:10px; }
+.question-reuse-dialog .question-reuse-error { color:#b34154; }
+.chat-message.conversation-selected { outline:2px solid #e9aab5; outline-offset:5px; border-radius:8px; scroll-margin:16px; }

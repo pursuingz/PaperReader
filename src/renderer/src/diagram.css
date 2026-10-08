@@ -1,0 +1,36 @@
+.canvas-board-switch { display:flex; gap:5px; margin:8px 0 12px; }
+.canvas-board-switch button { flex:1; padding:8px; border:1px solid #e5e0d7; border-radius:8px; background:#fbf9f4; color:#6d776e; font-size:12px; cursor:pointer; }
+.canvas-board-switch button[aria-pressed="true"] { background:#fff1e9; border-color:#efb6a9; color:#a74744; }
+.diagram-tools { margin:8px 0 10px; padding:9px; border:1px solid #e5e0d7; border-radius:8px; background:#fbfaf6; }
+.diagram-toolbar,.mind-map-toolbar,.diagram-properties,.mind-map-order { display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+.diagram-toolbar>span { font-size:9px; letter-spacing:1px; color:#7c827b; width:100%; margin-bottom:3px; }
+.diagram-tools button,.mind-map-editor button { border:1px solid #deddd6; background:#fffdf8; border-radius:5px; padding:6px 8px; font-size:11px; color:#4c5d58; cursor:pointer; }
+.diagram-tools button:disabled,.mind-map-editor button:disabled { opacity:.45; cursor:default; }
+.diagram-picker { display:flex; align-items:center; gap:8px; margin:9px 0; font-size:9px; letter-spacing:.8px; color:#85867e; }
+.diagram-picker select { flex:1; min-width:0; }
+.diagram-tools select,.mind-map-editor select,.diagram-tools input { min-width:0; border:1px solid #e2dfd5; background:white; color:#4d5a58; border-radius:5px; padding:5px; font-size:11px; }
+.diagram-properties label,.diagram-connection-fields label,.mind-map-reparent label { display:flex; flex-direction:column; gap:4px; font-size:10px; color:#79817b; }
+.diagram-properties { margin-bottom:8px; }
+.diagram-geometry { width:100%; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; }
+.diagram-geometry input { width:100%; box-sizing:border-box; }
+.diagram-connections { border-top:1px solid #e5e0d7; padding-top:7px; }
+.diagram-connections summary { font-size:11px; color:#617a70; cursor:pointer; }
+.diagram-connection-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:7px; margin:8px 0; }
+.diagram-connection-fields>div { display:flex; flex-direction:column; gap:5px; }
+.diagram-warning,.diagram-save-status { font-size:10px; line-height:1.5; color:#7b796e; margin:6px 0 0; }
+.diagram-warning { color:#9b683c; }
+.canvas-diagram-layer>g { cursor:move; }
+.mind-map-toolbar { margin-bottom:8px; }
+.mind-map-properties { border:1px solid #e4e0d6; background:#fbfaf6; border-radius:7px; padding:8px; margin:8px 0; }
+.mind-map-properties>label { display:flex; flex-direction:column; gap:6px; color:#79817b; font-size:10px; }
+.mind-map-properties textarea { width:100%; min-height:65px; resize:vertical; box-sizing:border-box; border:1px solid #e0dfd6; border-radius:5px; padding:8px; font-size:12px; color:#334155; }
+.mind-map-reparent { display:flex; align-items:flex-end; gap:7px; margin:8px 0; }
+.mind-map-reparent label { flex:1; min-width:0; }
+.mind-map-scroll { overflow:auto; position:relative; max-height:520px; min-height:220px; border:1px solid #e4e0d6; border-radius:8px; background:#fffdf8; }
+.mind-map-page { display:block; max-width:none; }
+.mind-map-page [role="button"] { cursor:pointer; }
+.mind-map-empty { position:absolute; top:70px; left:20px; max-width:260px; font-size:12px; line-height:1.6; color:#8b8d83; }
+.canvas-expanded-dialog .mind-map-scroll { max-height:none; flex:1; min-height:0; }
+.canvas-expanded-dialog .mind-map-editor { display:flex; flex-direction:column; flex:1; min-height:0; }
+.canvas-expanded-dialog .diagram-tools { flex-shrink:0; }
+@media(max-width:450px) { .diagram-geometry { grid-template-columns:repeat(2,minmax(0,1fr)); } }

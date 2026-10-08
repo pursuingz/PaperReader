@@ -1,0 +1,9 @@
+.request-retry { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; max-width: 100%; }
+.request-retry button { font: inherit; font-size: 11px; color: #53637c; background: #fff8fa; border: 1px solid #f0dce2; border-radius: 5px; padding: 4px 7px; cursor: pointer; }
+.request-retry button:hover:enabled { background: #fff0f4; color: #ba5065; }
+.request-retry button:focus-visible { outline: 2px solid #ee8198; outline-offset: 2px; }
+.request-retry button:disabled { cursor: default; opacity: .58; }
+.request-retry small { font-size: 10px; color: #7a847d; overflow-wrap: anywhere; }
+.request-history-error { margin: 10px 16px; padding: 10px; border: 1px solid #efdcbb; background: #fff8ed; color: #865c37; font-size: 11px; overflow-wrap: anywhere; border-radius: 6px; }
+.request-history-error p { margin: 0 0 6px; }
+.request-history-error button { font: inherit; padding: 4px 7px; cursor: pointer; }

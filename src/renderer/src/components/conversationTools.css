@@ -1,0 +1,20 @@
+.conversation-tools { flex: none; min-width: 0; padding: 5px 14px; border-bottom: 1px solid #edf0f4; background: #fff; }
+.conversation-search-toggle { color: #8692a2; border-radius: 5px; padding: 4px 5px; font-size: 9px; gap: 5px; }
+.conversation-search-toggle[aria-expanded='true'] { color: #bc7282; background: #fff3f5; }
+.conversation-search-toggle:focus-visible, .conversation-search-form button:focus-visible, .conversation-search-result:focus-visible, .question-actions button:focus-visible { outline: 2px solid #dfacb7; outline-offset: 2px; }
+.conversation-search-panel { min-width: 0; padding: 6px 0 3px; }
+.conversation-search-form { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.conversation-search-form input { flex: 1; width: 0; min-width: 0; border: 1px solid #e4e9f0; border-radius: 5px; background: #fafbfd; padding: 7px 8px; font-size: 10px; outline: none; }
+.conversation-search-form input:focus { border-color: #e8b2be; box-shadow: 0 0 0 2px #fbeff2; }
+.conversation-search-form input::placeholder { color: #a5adba; }
+.conversation-search-form button { flex: none; width: 22px; height: 26px; padding: 0; border-radius: 4px; color: #8795a6; gap: 0; }
+.conversation-search-status { margin: 7px 2px 5px; font-size: 9px; line-height: 1.5; color: #929dac; overflow-wrap: anywhere; }
+.conversation-search-results { max-height: 116px; overflow: auto; padding: 1px 2px 3px; overscroll-behavior: contain; }
+.conversation-search-result { display: block; width: 100%; text-align: left; padding: 7px 8px; margin: 2px 0; border: 1px solid transparent; border-radius: 5px; color: #8390a2; background: #f9fafc; }
+.conversation-search-result strong { display: block; color: #7b8799; font-size: 8px; font-weight: 600; margin-bottom: 3px; }
+.conversation-search-result span { font-size: 9px; line-height: 1.55; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.conversation-search-result.selected { color: #927482; border-color: #f1d5dc; background: #fff4f6; }
+.conversation-search-result.selected strong { color: #b97685; }
+.question-actions { display: flex; justify-content: flex-end; margin: 5px 0 0; }
+.question-actions button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 5px; color: #8c9aaa; border-radius: 4px; font-size: 9px; }
+.question-actions button:hover:not(:disabled) { color: #ae7584; background: #fff3f5; }

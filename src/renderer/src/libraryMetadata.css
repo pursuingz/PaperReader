@@ -1,0 +1,25 @@
+.library-group + .library-group { margin-top: 18px; }
+.library-paper-row { position: relative; display: flex; align-items: center; border-radius: 7px; }
+.library-paper-row.selected { background: #fff0f2; }
+.library-paper-row .paper-item { min-width: 0; flex: 1; }
+.library-paper-row .paper-item-text { flex: 1; }
+.library-paper-row .paper-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paper-actions { flex-shrink: 0; align-self: stretch; display: flex; align-items: center; padding-right: 2px; }
+.paper-actions-button { width: 22px; height: 28px; border-radius: 5px; color: #8290a1; gap: 0; }
+.paper-actions-button:hover, .paper-actions-button[aria-expanded='true'] { background: #fff0f2; color: #dc5064; }
+.paper-actions-menu { position: absolute; z-index: 25; left: 4px; right: 4px; top: calc(100% - 4px); background: #fff; border: 1px solid #e5eaf0; border-radius: 7px; padding: 4px; box-shadow: 0 6px 18px #26324520; }
+.paper-actions-menu button { width: 100%; padding: 9px 5px; justify-content: flex-start; border-radius: 4px; font-size: 10px; gap: 5px; }
+.paper-information-editor { width: min(440px, calc(100vw - 40px)); background: #fff; border: 1px solid #e5eaf0; border-radius: 16px; padding: 25px 28px; box-shadow: 0 20px 80px #1d2b4530; max-height: 90vh; overflow: auto; }
+.paper-information-top { display: flex; align-items: center; justify-content: space-between; }
+.paper-information-top > span { display: flex; background: #fff0f2; color: var(--coral); border-radius: 9px; padding: 10px; }
+.paper-information-editor h2 { font: 27px Georgia, serif; letter-spacing: -.6px; margin: 15px 0 9px; }
+.paper-information-editor > p { font-size: 11px; color: #8b97a8; line-height: 1.8; }
+.paper-information-editor > label { display: block; font-size: 11px; font-weight: 600; margin: 19px 0; }
+.paper-information-editor label small { float: right; font-size: 9px; color: #96a1b0; font-weight: 400; }
+.paper-information-editor input { display: block; width: 100%; margin-top: 8px; padding: 11px; border: 1px solid #e4e9f0; border-radius: 7px; background: #fbfcfd; font-size: 11px; }
+.paper-information-editor input::placeholder { color: #b1bac7; }
+.paper-information-editor .paper-information-file { font-size: 9px; margin: 14px 0 20px; overflow-wrap: anywhere; }
+.paper-information-file span { color: #758498; }
+.paper-information-editor .paper-information-error { color: #a46d43; background: #fff8ed; border: 1px solid #f1e1c8; border-radius: 6px; padding: 8px 10px; }
+.paper-information-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+.paper-information-buttons .secondary-button { margin-top: 0; }
