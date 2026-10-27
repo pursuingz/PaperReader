@@ -1,11 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { BookOpen, X } from 'lucide-react'
-import type { Paper, PaperMetadata } from '../../../shared/types'
+import type { Paper, PaperMetadata, PaperCategory } from '../../../shared/types'
 import { paperInformationInput } from '../libraryMetadata'
+import { PaperInformationSaveSession } from '../paperInformationSave'
 
-interface Props { paper: Paper; onSave(paperId: string, input: PaperMetadata): Promise<void>; onClose(): void }
-export default function PaperInformationEditor({ paper, onSave, onClose }: Props) {
+interface Props {
+  paper:Paper;categories:PaperCategory[];categoryId:string|null;categoriesReady:boolean;categoriesBusy:boolean;categoriesFailed:boolean
+  onRetryCategories():void;onSave(paperId:string,input:PaperMetadata):Promise<void>;onCategorySave(paperId:string,categoryId:string|null):Promise<void>;onClose():void
+}
+export default function PaperInformationEditor({ paper, categories, categoryId:storedCategoryId, categoriesReady, categoriesBusy, categoriesFailed, onRetryCategories, onSave, onCategorySave, onClose }: Props) {
   const [title, setTitle] = useState(paper.title), [authors, setAuthors] = useState(paper.authors ?? ''), [year, setYear] = useState(paper.year == null ? '' : String(paper.year))
+  const [categoryId,setCategoryId]=useState(categoriesReady?storedCategoryId??'':'')
+  const categoryEdited=useRef(false)
+  const session=useRef(new PaperInformationSaveSession(paper.id,{title:paper.title,authors:paper.authors??'',year:paper.year??null},categoriesReady?storedCategoryId:undefined))
+  useEffect(()=>{
+    if(!categoriesReady)return
+    session.current.captureCategory(storedCategoryId)
+    if(!categoryEdited.current)setCategoryId(storedCategoryId??'')
+  },[categoriesReady,storedCategoryId])
   const [saving, setSaving] = useState(false), [error, setError] = useState('')
   const dialog = useRef<HTMLFormElement>(null), savingRef = useRef(false), closeRef = useRef(onClose)
   closeRef.current = onClose
@@ -15,7 +27,7 @@ export default function PaperInformationEditor({ paper, onSave, onClose }: Props
     const keydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); if (!savingRef.current) closeRef.current(); return }
       if (event.key !== 'Tab') return
-      const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [])
+      const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)') ?? [])
       if (!controls.length) { event.preventDefault(); dialog.current?.focus(); return }
       const first = controls[0], last = controls[controls.length - 1]
       if (event.shiftKey && (document.activeElement === first || !dialog.current?.contains(document.activeElement))) { event.preventDefault(); last.focus() }
@@ -30,7 +42,7 @@ export default function PaperInformationEditor({ paper, onSave, onClose }: Props
     try {
       const input = paperInformationInput(title, authors, year)
       savingRef.current = true; setSaving(true)
-      await onSave(paper.id, input)
+      await session.current.save(input,categoriesReady?categoryId||null:undefined,{metadata:onSave,category:onCategorySave})
       onClose()
     } catch (failure) { setError(String(failure instanceof Error ? failure.message : failure)) }
     finally { savingRef.current = false; setSaving(false) }
@@ -43,6 +55,8 @@ export default function PaperInformationEditor({ paper, onSave, onClose }: Props
       <label>Title<input aria-label="Paper title" value={title} maxLength={300} disabled={saving} onChange={event => setTitle(event.target.value)}/></label>
       <label>Authors <small>Optional · free text</small><input aria-label="Paper authors" placeholder="Author One; Author Two" value={authors} maxLength={1000} disabled={saving} onChange={event => setAuthors(event.target.value)}/></label>
       <label>Publication year <small>Optional</small><input aria-label="Publication year" inputMode="numeric" placeholder="2026" value={year} maxLength={4} disabled={saving} onChange={event => setYear(event.target.value)}/></label>
+      <label>Category<select aria-label="Paper category" aria-describedby={!categoriesReady?'paper-category-status':undefined} value={categoryId} disabled={saving||!categoriesReady||categoriesBusy} onChange={event=>{categoryEdited.current=true;setCategoryId(event.target.value)}}><option value="">Imported / unassigned</option>{categories.map(category=><option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+      {!categoriesReady&&<div id="paper-category-status" className="paper-category-status" role="status"><span>{categoriesFailed?'Categories unavailable. Paper details can still be saved.':'Loading categories… Paper details can still be saved.'}</span>{categoriesFailed&&<button type="button" disabled={saving} onClick={onRetryCategories}>Retry categories</button>}</div>}
       <p className="paper-information-file">Imported file: <span>{paper.fileName}</span></p>
       {error && <p className="paper-information-error" role="alert">{error}</p>}
       <div className="paper-information-buttons"><button type="button" className="secondary-button" aria-label="Cancel paper information" disabled={saving} onClick={onClose}>Cancel</button><button type="submit" className="primary-button" aria-label="Save paper information" disabled={saving}>{saving ? 'Saving…' : 'Save information'}</button></div>

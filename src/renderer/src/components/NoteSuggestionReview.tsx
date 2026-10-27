@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDownToLine, Replace, Sparkles, X } from 'lucide-react'
 import { NOTE_CHARACTER_LIMIT, type NoteAdoptionMode } from '../noteAdoption'
+import { buildNoteDifference } from './noteDifference'
 import './noteSuggestionReview.css'
 
 export interface NoteSuggestionReviewProps {
@@ -29,6 +30,7 @@ export default function NoteSuggestionReview({ paperId, originalNote, proposal, 
     ++operation.current; applying.current = false
     setEdited(proposal); setError(''); setPending(false)
   }, [paperId, originalNote, proposal])
+  const difference = useMemo(() => buildNoteDifference(originalNote, edited), [originalNote, edited])
   const locked = disabled || pending
   const hasText = Boolean(edited.trim())
   const appendLength = edited.length + (originalNote ? originalNote.length + 2 : 0)
@@ -70,6 +72,18 @@ export default function NoteSuggestionReview({ paperId, originalNote, proposal, 
           <label className="note-review-pane"><span className="note-review-pane-heading"><strong>Current note</strong><small>{originalNote.length.toLocaleString()} characters</small></span><span className="note-review-pane-hint">Snapshot taken when this review opened</span><textarea aria-label="Current note" readOnly value={originalNote} placeholder="Your current note is empty." spellCheck={false}/></label>
           <label className="note-review-pane proposed"><span className="note-review-pane-heading"><strong>Suggested note</strong><small>{edited.length.toLocaleString()} characters</small></span><span className="note-review-pane-hint">Edit this proposal before applying it</span><textarea ref={editor} aria-label="Suggested note" disabled={locked} value={edited} onChange={event => { setEdited(event.target.value); setError('') }} spellCheck={false}/></label>
         </div>
+        <details className="note-review-differences" open>
+          <summary>Changes from current note <span>{difference.changed ? `${difference.removedLines.toLocaleString()} removed / ${difference.addedLines.toLocaleString()} added lines` : 'No text changes'}</span></summary>
+          <p className="note-review-diff-hint">Removed (−) and added (+) text includes moves. Review meaning and qualifiers before applying. Both full notes remain editable or readable above.</p>
+          {difference.changed && <div className="note-review-diff-lines" role="region" aria-label="Note line differences" tabIndex={0}>
+            {difference.rows.map((row, index) => <div key={index} className={`note-review-diff-line ${row.kind}`} data-change={row.kind}>
+              <span className="note-review-diff-number" aria-label={row.kind === 'added' ? 'Suggested line' : 'Current line'}>{row.kind === 'added' ? row.proposedLine : row.originalLine}</span>
+              <span className="note-review-diff-sign" aria-hidden="true">{row.kind === 'removed' ? '−' : row.kind === 'added' ? '+' : ' '}</span>
+              <span className="note-review-diff-text">{row.text || ' '}</span>
+            </div>)}
+          </div>}
+          {difference.truncated && <p className="note-review-diff-limited" role="status">Preview limited to 160 lines and 24,000 characters; long lines are shortened here. Compare the complete notes above for remaining changes.</p>}
+        </details>
         <div className="note-review-feedback">
           {error ? <p role="alert">{error}</p> : edited.length > NOTE_CHARACTER_LIMIT ? <p role="status">The suggestion exceeds the 2,000,000 character note limit. Shorten it before applying.</p> : hasText && !canAppend ? <p role="status">Appending would exceed the note limit. Shorten the suggestion, or replace the note.</p> : <p>Append keeps your current note and adds the edited suggestion below it. Replace uses only the edited suggestion.</p>}
         </div>

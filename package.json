@@ -1,6 +1,6 @@
 {
   "name": "paper-reader",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Local AI-assisted paper reading workspace",
   "main": "out/main/index.js",
@@ -10,9 +10,12 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts tests/*.test.tsx src/renderer/src/*.test.ts",
     "build": "electron-vite build",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "prepare:input": "node scripts/prepare-local-input.mjs"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.32",
+    "@milkdown/crepe": "^7.22.3",
     "katex": "^0.16.47",
     "lucide-react": "^0.468.0",
     "pdf-lib": "1.17.1",

@@ -1,10 +1,12 @@
 import { mkdir, readFile, writeFile, rename, copyFile, readdir, stat } from 'node:fs/promises'
 import { join, basename } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { LibraryMetadata, LibraryOrganization, Paper, PaperMetadata, PaperState, PaperSummary, PdfInk, ReadingMarks } from '../shared/types'
 import { validId, validateMarks, validateState, validateSummary } from './validation'
 import { validateAssignment, validateCategoryId, validateCategoryName, validateLibraryOrganization, validatePdfInk } from './workflowValidation'
 import { normalizePaperMetadata, validateLibraryMetadata } from './metadataValidation'
+import { ManagedPaperFiles } from './managedPaperFiles'
+import type { ManagedConsolidationResult, ManagedDirectoryStatus, ManagedPaperFileStatus, ManagedPaperImportOptions, ManagedPaperImportResult, ManagedScanOptions, ManagedScanResult } from '../shared/managedPaperTypes'
 
 function validateLibrary(value: unknown): void {
   if (!Array.isArray(value)) throw new Error('Invalid library')
@@ -17,7 +19,14 @@ function validateLibrary(value: unknown): void {
 
 export class PaperStore {
   private tail: Promise<unknown> = Promise.resolve()
-  constructor(readonly root: string) {}
+  private readonly managed: ManagedPaperFiles
+  constructor(readonly root: string, options: { managedDirectory?: string } = {}) {
+    this.managed = new ManagedPaperFiles(root, {
+      readPapers: () => this.readStoredLibrary(),
+      savePapers: (papers, signal) => this.atomicJson(join(this.root, 'library.json'), papers, signal),
+      atomicJson: (path, value, signal) => this.atomicJson(path, value, signal)
+    }, options.managedDirectory)
+  }
   async flush(): Promise<void> { await this.tail }
   private serial<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.tail.then(operation); this.tail = next.catch(() => {}); return next
@@ -56,27 +65,75 @@ export class PaperStore {
     try { papers = await this.readJson<Paper[]>(join(this.root, 'library.json'), validateLibrary) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
     if (!papers.some(paper => paper.id === id)) throw new Error('Paper not found. Import a local PDF first.')
   }
+  private async readStoredLibrary(): Promise<Paper[]> {
+    try { return await this.readJson<Paper[]>(join(this.root, 'library.json'), validateLibrary) } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error
+    }
+  }
+  async getManagedDirectory(): Promise<ManagedDirectoryStatus> {
+    await this.tail
+    return this.managed.getDirectory()
+  }
+  async getManagedPdfDirectories(): Promise<string[]> {
+    await this.tail
+    return this.managed.protectedDirectories()
+  }
+  async configureManagedDirectory(directory: string): Promise<ManagedDirectoryStatus> {
+    return this.serial(() => this.managed.configure(directory))
+  }
+  async importManagedPdf(source: string, options: ManagedPaperImportOptions = {}): Promise<ManagedPaperImportResult> {
+    const snapshot = { ...options, identifiers: options.identifiers ? { ...options.identifiers } : undefined }
+    return this.serial(() => this.managed.importFile(source, snapshot))
+  }
+  async importManagedBytes(bytes: Uint8Array, fileName: string, options: ManagedPaperImportOptions = {}): Promise<ManagedPaperImportResult> {
+    if (!(bytes instanceof Uint8Array) || bytes.length < 1 || bytes.length > 200 * 1024 * 1024) throw new Error('Choose valid PDF bytes smaller than 200 MB')
+    const snapshot = new Uint8Array(bytes), settings = { ...options, identifiers: options.identifiers ? { ...options.identifiers } : undefined }
+    return this.serial(() => this.managed.importBytes(snapshot, fileName, settings))
+  }
   async importPdf(source: string): Promise<Paper> {
-    const metadata = await stat(source)
-    if (!metadata.isFile() || metadata.size > 200 * 1024 * 1024) throw new Error('Choose a PDF smaller than 200 MB')
-    const bytes = await readFile(source)
-    if (!bytes.subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new Error('Selected file is not a PDF')
-    const papers = await this.list()
     return this.serial(async () => {
+      if ((await this.managed.getDirectory()).configured) {
+        const result = await this.managed.importFile(source)
+        if (!result.paper) throw new Error('Select whether to import a distinct PDF version')
+        return result.paper
+      }
+      const metadata = await stat(source)
+      if (!metadata.isFile() || metadata.size > 200 * 1024 * 1024) throw new Error('Choose a PDF smaller than 200 MB')
+      const bytes = await readFile(source)
+      if (!bytes.subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new Error('Selected file is not a PDF')
       const paper: Paper = { id: randomUUID(), title: basename(source).replace(/\.pdf$/i, ''), fileName: basename(source), importedAt: new Date().toISOString(), category: 'Imported' }
       const directory = this.paperDirectory(paper.id); await mkdir(directory, { recursive: true })
       await writeFile(join(directory, 'document.pdf'), bytes)
-      // Read inside the queue to avoid losing another concurrently imported paper.
-      let current = papers
-      try { current = await this.readJson<Paper[]>(join(this.root, 'library.json'), validateLibrary) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+      const current = await this.readStoredLibrary()
       await this.atomicJson(join(this.root, 'library.json'), [...current, paper]); return paper
     })
   }
   async readPdf(id: string): Promise<Uint8Array> {
     await this.requirePaper(id)
-    try { return new Uint8Array(await readFile(join(this.paperDirectory(id), 'document.pdf'))) } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('The imported PDF copy is missing. Import the original again.'); throw error
-    }
+    return (await this.managed.read(id)).bytes
+  }
+  async resolvePaperPath(id: string): Promise<string> {
+    await this.requirePaper(id)
+    return (await this.managed.read(id)).path
+  }
+  async getPaperFileStatus(id: string): Promise<ManagedPaperFileStatus> {
+    await this.requirePaper(id)
+    return this.managed.fileStatus(id)
+  }
+  async relinkPaperPdf(id: string, source: string): Promise<ManagedPaperFileStatus> {
+    validId(id)
+    return this.serial(async () => { await this.requireStoredPaper(id); return this.managed.relink(id, source) })
+  }
+  async consolidateLegacyPdfs(ids?: string[]): Promise<ManagedConsolidationResult> {
+    const selection = ids ? [...ids] : undefined
+    return this.serial(() => this.managed.consolidate(selection))
+  }
+  async scanManagedDirectory(options: ManagedScanOptions = {}): Promise<ManagedScanResult> {
+    const snapshot = { ...options }
+    return this.serial(() => this.managed.scan(snapshot))
+  }
+  async importScannedPdf(token: string): Promise<ManagedPaperImportResult> {
+    return this.serial(() => this.managed.importToken(token))
   }
   async loadState(id: string): Promise<PaperState> {
     validId(id)
@@ -93,6 +150,32 @@ export class PaperStore {
       if (id !== 'demo-workspace') await this.requireStoredPaper(id)
       await mkdir(this.paperDirectory(id), { recursive: true })
       await this.atomicJson(join(this.paperDirectory(id), 'state.json'), { ...snapshot, messages: snapshot.messages.filter(message => !message.isDemo) })
+    })
+  }
+  async appendTextIfUnchanged(id: string, markdown: string, expectedSha256: string, guard?: () => boolean): Promise<PaperState> {
+    validId(id)
+    if (guard !== undefined && typeof guard !== 'function') throw new Error('Invalid note append owner guard')
+    if (typeof expectedSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error('Invalid reviewed Text revision hash')
+    if (typeof markdown !== 'string' || !markdown.trim() || markdown.length > 2_000_000) throw new Error('Append text must be nonempty and within the note limit')
+    return this.serial(async () => {
+      if (guard && !guard()) throw new Error('Note append cancelled')
+      await this.requireStoredPaper(id)
+      const directory = this.paperDirectory(id), path = join(directory, 'state.json')
+      let current: PaperState
+      try { current = await this.readJson<PaperState>(path, value => validateState(value, id)) } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        let files: string[] = []
+        try { files = await readdir(directory) } catch (directoryError) { if ((directoryError as NodeJS.ErrnoException).code !== 'ENOENT') throw directoryError }
+        if (files.some(name => name.startsWith('state.json.backup-') || name.startsWith('state.json.tmp-') || name.startsWith('state.json.retained'))) throw new Error('The notes primary is missing. Retained recovery files were preserved; recover notes before appending.')
+        current = { note: '', messages: [], lastPage: 1 }
+      }
+      if (createHash('sha256').update(current.note, 'utf8').digest('hex') !== expectedSha256) throw new Error('Text revision changed after review. Independent notes and the latest edits were preserved.')
+      const next: PaperState = { ...current, note: current.note + (current.note.trim() ? '\n\n' : '') + markdown }
+      validateState(next, id)
+      await mkdir(directory, { recursive: true })
+      if (guard && !guard()) throw new Error('Note append cancelled')
+      await this.atomicJson(path, next)
+      return structuredClone(next)
     })
   }
   async loadMarks(id: string): Promise<ReadingMarks> {

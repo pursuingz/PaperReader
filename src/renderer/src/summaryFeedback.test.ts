@@ -21,3 +21,12 @@ test('non-Electron errors preserve actionable diagnostics without transport assu
   assert.match(summaryFailureMessage(new Error('This PDF needs a password.'), false), /needs a password/)
   assert.match(summaryFailureMessage(null, false), /Summary generation failed/)
 })
+
+test('summary feedback does not duplicate the saved-summary notice already supplied by main', () => {
+  const detail = 'Source evidence 1/3: Summary JSON/evidence validation [QUOTE_NOT_IN_SOURCE]. Still failed after 2 attempts. Your saved summary is unchanged.'
+  for (const error of [detail, new Error("Error invoking remote method 'paper-reader:generate-summary': Error: " + detail)]) {
+    const result = summaryFailureMessage(error, true)
+    assert.equal(result, detail)
+    assert.equal(result.split('Your saved summary is unchanged.').length - 1, 1)
+  }
+})

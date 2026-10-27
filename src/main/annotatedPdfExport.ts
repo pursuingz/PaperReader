@@ -1,3 +1,4 @@
+import { colorRgb, highlightColorHex } from '../shared/colors'
 import { realpath, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import {
@@ -16,7 +17,6 @@ import { readingExportFileName } from './readingExport'
 type Matrix = [number, number, number, number, number, number]
 type Bounds = { left: number; bottom: number; right: number; top: number }
 type ChoosePdfPath = (suggestedName: string) => Promise<{ canceled: boolean; filePath?: string }>
-const highlightColors = { yellow: '#f3d653', coral: '#f49dad', mint: '#83c6ac' }
 
 function bounds(box: { x: number; y: number; width: number; height: number }): Bounds {
   const values = [box.x, box.y, box.width, box.height, box.x + box.width, box.y + box.height]
@@ -69,7 +69,7 @@ function commentIcon(mark: Highlight, matrix: Matrix): NormalizedRect {
   return { ...position, width, height }
 }
 function addHighlight(document: PDFDocument, page: PDFPage, mark: Highlight, matrix: Matrix): void {
-  const color = colorComponents(highlightColors[mark.color])
+  const color = colorRgb(highlightColorHex(mark.color))
   for (const rect of mark.rects) {
     const box = transformedRect(rect, matrix)
     page.drawRectangle({ x: box.left, y: box.bottom, width: box.right - box.left, height: box.top - box.bottom, color: rgb(...color), opacity: .4, blendMode: BlendMode.Multiply })

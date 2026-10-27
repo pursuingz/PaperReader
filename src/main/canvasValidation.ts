@@ -1,7 +1,8 @@
+import { COLOR_PRESETS, isHexColor } from '../shared/colors'
 import type { CanvasDocument, CanvasImageAsset } from '../shared/types'
 import { object, validId } from './validation'
 
-export const canvasColors = ['#334155', '#ed6376', '#4b8f82'] as const
+export const canvasColors = COLOR_PRESETS.map(color => color.value)
 export const canvasImageLimit = 10 * 1024 * 1024
 export function validateCanvasPaperId(value: unknown): asserts value is string {
   validId(value)
@@ -12,7 +13,7 @@ export function validateCanvasAssetId(value: unknown): asserts value is string {
 }
 function fields(value: Record<string, unknown>, allowed: string[]) { if (Object.keys(value).some(key => !allowed.includes(key))) throw new Error('Invalid canvas fields') }
 function finite(value: unknown, min: number, max: number): asserts value is number { if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error('Invalid canvas geometry') }
-function color(value: unknown) { if (!canvasColors.includes(value as typeof canvasColors[number])) throw new Error('Invalid canvas color') }
+function color(value: unknown) { if (!isHexColor(value)) throw new Error('Invalid canvas color') }
 export function validateCanvasDocument(value: unknown): asserts value is CanvasDocument {
   object(value); fields(value, ['version', 'width', 'height', 'objects'])
   if (value.version !== 1 || value.width !== 1000 || value.height !== 1200 || !Array.isArray(value.objects) || value.objects.length > 500) throw new Error('Invalid canvas document or object limit')

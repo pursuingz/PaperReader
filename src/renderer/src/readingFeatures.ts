@@ -1,3 +1,4 @@
+import { isHighlightColor } from '../../shared/colors'
 import type { DesktopAPI, Highlight, InkStroke, NormalizedRect, PdfTextPage, ReadingMarks } from '../../shared/types'
 import { StrokeHistory, validateInk, type InkBounds, type InkPoint } from './annotationEditing'
 
@@ -29,7 +30,27 @@ export async function readReaderPage(document: TextDocument, page: number, alive
   if (!alive()) return null
   return content.items.map(item => item && typeof item === 'object' && 'str' in item ? String(item.str) : '').join(' ')
 }
-export async function extractAllPages(document: TextDocument, alive: () => boolean, progress?: (page: number, total: number) => void): Promise<PdfTextPage[]> {
+function summaryPageText(items: unknown[]): string {
+  const lines: string[] = []
+  let line: string[] = []
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || !('str' in item)) continue
+    line.push(String(item.str))
+    if ('hasEOL' in item && item.hasEOL === true) {
+      lines.push(line.join(' ').trim())
+      line = []
+    }
+  }
+  if (line.length) lines.push(line.join(' ').trim())
+  return lines.join('\n').trim()
+}
+
+/** Preserve explicit PDF line/paragraph cues only for Summary; never reorder or repair source words. */
+export function extractSummaryPages(document: TextDocument, alive: () => boolean, progress?: (page: number, total: number) => void): Promise<PdfTextPage[]> {
+  return extractAllPages(document, alive, progress, { preserveStructure: true })
+}
+
+export async function extractAllPages(document: TextDocument, alive: () => boolean, progress?: (page: number, total: number) => void, options?: { preserveStructure?: boolean }): Promise<PdfTextPage[]> {
   if (document.numPages > 200) throw new Error('AI reading supports up to 200 pages. This paper has not been sent.')
   const pages: PdfTextPage[] = []
   let length = 0
@@ -40,7 +61,8 @@ export async function extractAllPages(document: TextDocument, alive: () => boole
     check()
     const content = await pdfPage.getTextContent()
     check()
-    const text = content.items.map(item => item && typeof item === 'object' && 'str' in item ? String(item.str) : '').join(' ').trim()
+    const text = options?.preserveStructure ? summaryPageText(content.items)
+      : content.items.map(item => item && typeof item === 'object' && 'str' in item ? String(item.str) : '').join(' ').trim()
     length += text.length
     if (length > 240000) throw new Error('AI reading supports up to 240,000 text characters. This paper has not been sent.')
     pages.push({ page, text })
@@ -87,7 +109,7 @@ export class ReadingMarksSession {
   }
   private recordHighlight(edit: HighlightEdit) { this.highlightPast.push(edit); this.highlightFuture = [] }
   setHighlightColor(id: string, color: Highlight['color']) {
-    if (!this.ready || !['yellow', 'coral', 'mint'].includes(color)) return false
+    if (!this.ready || !isHighlightColor(color)) return false
     const item = this.value.highlights.find(item => item.id === id)
     if (!item || item.color === color) return false
     this.recordHighlight({ kind: 'color', id, before: item.color, after: color })

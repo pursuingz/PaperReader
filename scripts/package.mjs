@@ -15,14 +15,17 @@ const app = join(destination, 'resources', 'app')
 await mkdir(destination, { recursive: true })
 await cp(runtime, destination, { recursive: true })
 await mkdir(app, { recursive: true })
-await cp(join(project, 'out'), join(app, 'out'), { recursive: true })
+await cp(join(project, 'out'), join(app, 'out'), { recursive: true, filter: file => !file.endsWith('.part') })
 await writeFile(join(app, 'package.json'), JSON.stringify({
   name: 'paper-reader',
   productName: 'Paper Reader',
   version: manifest.version,
   main: 'out/main/index.js'
 }, null, 2))
+if (process.env.PAPER_READER_INITIAL_PAPERS_DIR) {
+  await writeFile(join(app, 'out', 'initial-library.json'), JSON.stringify({ papersDirectory: resolve(process.env.PAPER_READER_INITIAL_PAPERS_DIR) }, null, 2))
+}
 await copyFile(join(runtime, 'electron.exe'), join(destination, 'PaperReader.exe'))
 await writeFile(join(destination, 'README.txt'),
-  'Paper Reader - Windows desktop preview\r\n\r\nRun PaperReader.exe. Keep the whole directory together.\r\nPDFs and notes are stored in your local application data directory.\r\nAdd your own DeepSeek API key in Settings to enable AI.\r\nBundled demo content is explicitly labelled and is not an AI response.\r\n')
+  'Paper Reader - Windows desktop preview\r\n\r\nRun PaperReader.exe. Keep the whole directory together.\r\nImported/downloaded PDFs use your configured Papers folder. Notes and reading history stay in local application data.\r\nAdd your own DeepSeek API key in Settings to enable AI.\r\nVoice transcription runs locally after downloading/importing the multilingual model. Camera gestures are enabled explicitly.\r\nBundled demo content is explicitly labelled and is not an AI response.\r\n')
 console.log(`Portable application: ${destination}`)

@@ -1,46 +1,14 @@
 .note-canvas{flex:1;min-height:0;display:flex;flex-direction:column;background:#fff}
 .canvas-heading{display:flex;align-items:center;justify-content:space-between;padding:12px 15px 9px;color:#93a0b0;font-size:8px;letter-spacing:1.4px;flex-shrink:0}
 .canvas-heading button{font-size:10px;letter-spacing:0;color:#d45d70;border:1px solid #f7dce2;border-radius:5px;padding:5px 7px}
-.canvas-editor{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto}
-.canvas-tools{display:flex;flex-wrap:wrap;align-items:center;gap:3px;padding:4px 11px 9px;border-bottom:1px solid #edf0f4;flex-shrink:0}
-.canvas-tools>button{height:29px;min-width:27px;gap:4px;padding:4px 6px;border-radius:5px;color:#7d8a9b;font-size:10px}
-.canvas-tools button[aria-pressed=true]{background:#fff0f2;color:#db5d70}
-.canvas-colors{display:flex;gap:4px;border-right:1px solid #e4e9ef;margin-right:3px;padding:0 7px 0 2px}
-.canvas-colors button{width:12px;height:12px;border-radius:50%;padding:0;border:2px solid transparent}
-.canvas-colors button[aria-pressed=true]{outline:1px solid #a9b3c1;outline-offset:2px}
-.canvas-object-picker{display:flex;align-items:center;justify-content:space-between;padding:8px 13px;gap:7px;flex-shrink:0;color:#94a0b0;font-size:8px}
-.canvas-object-picker label{display:flex;align-items:center;gap:8px;min-width:0}
-.canvas-object-picker select{min-width:0;max-width:190px;border:1px solid #e6ebf1;border-radius:5px;padding:4px 6px;color:#64748b;background:#fff;font-size:10px}
-.canvas-object-picker small{white-space:nowrap;font-size:8px}
-.canvas-object-fields{padding:0 13px 9px;border-bottom:1px solid #edf0f4;flex-shrink:0}
-.canvas-text-field{display:block;color:#7e8b9d;font-size:9px;margin-bottom:8px}
-.canvas-text-field textarea{display:block;margin-top:5px;width:100%;height:74px;min-height:45px;max-height:150px;resize:vertical;border:1px solid #e2e7ee;border-radius:6px;background:#fffdf8;padding:8px;font-size:12px;line-height:1.6}
-.canvas-coordinate-fields{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px}
-.canvas-coordinate-fields label{font-size:8px;color:#91a0b0}
-.canvas-coordinate-fields input,.canvas-coordinate-fields select{display:block;width:55px;padding:4px 5px;font-size:10px;border:1px solid #e4eaf0;border-radius:4px;background:#fff;margin-top:3px}
-.canvas-coordinate-fields button{padding:5px 6px;font-size:9px;border:1px solid #e4eaf0;border-radius:4px;height:25px;color:#7c8a9c}
-.canvas-page-scroll{flex:0 0 220px;min-height:220px;overflow:auto;background:#eff2f5;padding:15px}
-.canvas-page{display:block;width:100%;height:auto;aspect-ratio:5/6;background:#fffdf8;box-shadow:0 2px 11px #33415516;border:1px solid #e5e5df;touch-action:none;user-select:none}
-.canvas-page g[role=button]{outline:none}
-.canvas-page g[role=button]:focus-visible>rect:first-child,.canvas-page g[role=button]:focus-visible>polyline{stroke:#ed6376;stroke-width:4}
-.canvas-mode-select g{cursor:move}.canvas-mode-draw{cursor:crosshair}.canvas-mode-erase{cursor:cell}
-.canvas-text-object{width:100%;height:100%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;overflow:hidden;padding:12px;font-family:Georgia,'Segoe UI',serif;pointer-events:none}
-.canvas-image-placeholder{display:flex;align-items:center;justify-content:center;height:100%;font-size:24px;color:#91a0b0;pointer-events:none}
-.canvas-resize-handle{cursor:nwse-resize}
 .canvas-status{display:flex;justify-content:space-between;align-items:center;padding:8px 13px;color:#8e9dae;font-size:9px;border-top:1px solid #e8edf2;gap:7px;flex-shrink:0}
 .canvas-status button{font-size:9px;color:#d86c7d;border-radius:4px;padding:3px;white-space:nowrap}
 .canvas-scope-note{font-size:8px;line-height:1.6;color:#96a3b4;padding:0 13px 9px;margin:0;flex-shrink:0}
-.canvas-resource-warning,.canvas-unavailable,.canvas-image-error{margin:5px 13px 9px;padding:8px 9px;border:1px solid #f0dfc5;border-radius:5px;background:#fff8eb;color:#9b8158;font-size:9px;line-height:1.6;flex-shrink:0}
-.canvas-image-error{display:flex;gap:7px;justify-content:space-between;align-items:center;overflow-wrap:anywhere}.canvas-image-error button,.canvas-unavailable button{font-size:9px;padding:4px;flex-shrink:0;color:#a87b46}
-.canvas-capture-source{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 13px;border-bottom:1px solid #edf0f4;color:#8997a8;font-size:9px;flex-shrink:0}.canvas-capture-source button{color:#d45d70;font-size:9px;padding:4px;border:1px solid #f7dce2;border-radius:5px;white-space:nowrap}
+.canvas-unavailable{margin:5px 13px 9px;padding:8px 9px;border:1px solid #f0dfc5;border-radius:5px;background:#fff8eb;color:#9b8158;font-size:9px;line-height:1.6;flex-shrink:0}
+.canvas-unavailable button{font-size:9px;padding:4px;flex-shrink:0;color:#a87b46}
 .canvas-expanded-placeholder{padding:50px 20px;font-size:12px;line-height:1.8;text-align:center;color:#9aa7b6}
-.canvas-expanded-backdrop{z-index:140}
+.canvas-expanded-backdrop{-webkit-app-region:no-drag;z-index:140}
 .canvas-expanded-dialog{width:min(1120px,94vw);height:92vh;border-radius:14px;background:#fff;display:flex;flex-direction:column;overflow:hidden;border:1px solid #e1e7ee;box-shadow:0 20px 80px #23324740}
 .canvas-expanded-top{display:flex;justify-content:space-between;align-items:center;padding:16px 21px;border-bottom:1px solid #e8edf2;flex-shrink:0}
 .canvas-expanded-top strong{font:23px Georgia,serif}.canvas-expanded-top small{display:block;color:#95a2b2;font-size:10px;margin-top:5px}.canvas-expanded-top button{width:32px;height:32px;border-radius:7px;color:#8190a4}
-.canvas-expanded-dialog .canvas-tools{padding:12px 18px;gap:6px}.canvas-expanded-dialog .canvas-tools>button{height:32px;padding:6px 9px}
-.canvas-expanded-dialog .canvas-page{width:min(100%,780px);margin:0 auto}.canvas-expanded-dialog .canvas-page-scroll{padding:22px}
-.canvas-expanded-dialog .canvas-editor{overflow:auto}.canvas-expanded-dialog .canvas-page-scroll{flex:1 0 220px}
-.canvas-expanded-dialog .canvas-object-fields{padding:3px 21px 12px;display:flex;gap:18px;align-items:flex-end}.canvas-expanded-dialog .canvas-text-field{flex:1;max-width:620px;margin-bottom:0}.canvas-expanded-dialog .canvas-text-field textarea{height:64px}
-.canvas-expanded-dialog .canvas-coordinate-fields{max-width:290px}.canvas-expanded-dialog .canvas-scope-note{padding:0 21px 10px;font-size:9px}
-@media(max-width:1100px){.canvas-tools{gap:2px;padding-left:8px;padding-right:8px}.canvas-tools>button{min-width:25px;padding:4px}.canvas-expanded-dialog .canvas-object-fields{gap:10px}}
+.canvas-expanded-dialog .canvas-scope-note{padding:0 21px 10px;font-size:9px}

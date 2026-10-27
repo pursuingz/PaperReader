@@ -4,5 +4,6 @@ export function summaryFailureMessage(error: unknown, hasSavedSummary: boolean):
     .replace(/^Error invoking remote method '[^']+':\s*/, '')
     .replace(/^Error:\s*/, '')
     .trim() || 'Summary generation failed. Please retry.'
-  return hasSavedSummary ? `${detail} Your saved summary is unchanged.` : detail
+  const preservationNotice = 'Your saved summary is unchanged.'
+  return hasSavedSummary && !detail.includes(preservationNotice) ? `${detail} ${preservationNotice}` : detail
 }

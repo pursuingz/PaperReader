@@ -7,13 +7,15 @@ export interface GeneralChatWorkspace extends GeneralChatSnapshot {
   hasApiKey: boolean
   needsSave: boolean
   onSettings: () => void
+  getDraft?: () => string
   setDraft: (value: string) => void
-  send: () => Promise<void>
+  send: (onCommitted?:()=>void) => Promise<void>
   cancel: () => Promise<void>
   flush: () => Promise<void>
   prepareToLeave: () => Promise<void>
   retryLoad: () => Promise<void>
   retryRequest: (record: AIRequestRecord) => Promise<void>
+  reanswerTask?: (taskId:string,question:string)=>Promise<void>
   copyText: (value: string) => Promise<void>
   history: AIRequestHistory | null
   historyReady: boolean
@@ -36,8 +38,8 @@ export default function useGeneralChat(api: DesktopAPI, options: GeneralChatOpti
   useEffect(() => { if (snapshot.ready && !snapshot.busy) void requests.refresh() }, [snapshot.ready, snapshot.busy, snapshot.state?.messages.length, requests.refresh])
   return {
     ...snapshot, hasApiKey: options.hasApiKey, needsSave: session.needsSave, onSettings: options.onSettings,
-    setDraft: session.setDraft, send: session.send, cancel: session.cancel, flush: () => session.flush(),
-    prepareToLeave: session.prepareToLeave, retryLoad: session.retryLoad, retryRequest: session.retryRequest,
+    getDraft: () => session.getSnapshot().draft, setDraft: session.setDraft, send: session.send, cancel: session.cancel, flush: () => session.flush(),
+    prepareToLeave: session.prepareToLeave, retryLoad: session.retryLoad, retryRequest: session.retryRequest,reanswerTask:session.reanswerTask,
     copyText: value => api.copyText(value), history: requests.history, historyReady: requests.ready,
     historyError: requests.error, refreshHistory: requests.refresh, recordForMessage: requests.recordForMessage
   }

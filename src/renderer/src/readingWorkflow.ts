@@ -1,38 +1,36 @@
-import type { AIContextMode, AIRequest, DesktopAPI, LibraryOrganization, Paper, PaperState, PdfInk, PdfInkStroke, PdfTextPage } from '../../shared/types'
+import type { AIContextMode, AIRequest, AIImageReference, ChatNotesSnapshot, DesktopAPI, LibraryOrganization, Paper, PaperState, PdfInk, PdfInkStroke, PdfTextPage } from '../../shared/types'
+import {hasChatNotesContent} from './chatNotesContext'
 import { extractAllPages } from './readingFeatures'
 import { NOTE_ORGANIZATION_PREFIX } from '../../shared/aiPrompts'
 import { StrokeHistory, type InkBounds, type InkPoint } from './annotationEditing'
 
 export const organizationPrompt = 'Organize my text notes into a clear reading outline. Preserve my ideas, distinguish open questions, and do not invent paper claims. Return a suggested version for me to review.'
-export const scopeDescriptions: Record<AIContextMode, string> = {
-  page: 'Sends current-page text, selected passage and recent chat to DeepSeek.',
-  paper: 'Sends all extracted paper text and recent chat to DeepSeek; does not add your text note.',
-  notes: 'Sends only your current text note to DeepSeek; paper text and chat stay local.',
-  'paper-notes': 'Sends all extracted paper text, your current text note and recent chat to DeepSeek.'
-}
-
 /** Capture selected sources before extraction or another asynchronous operation. */
 export function createQuestionSnapshot(input: {
   requestId: string; paper: Paper; state: PaperState; question: string; mode: AIContextMode
-  pageText: string; selection: string; action?: AIRequest['action']
+  pageText: string; selection: string; action?: AIRequest['action'];notesSnapshot?:ChatNotesSnapshot;attachments?:AIImageReference[]
 }): AIRequest {
   const mode = input.action === 'organize-notes' ? 'notes' : input.mode
-  const note = mode === 'notes' || mode === 'paper-notes' ? input.state.note : undefined
+  const notesSnapshot=input.action!=='organize-notes'&&(mode==='notes'||mode==='paper-notes')?input.notesSnapshot:undefined
+  const attachments=input.action==='organize-notes'?[]:input.attachments||[]
+  const note = mode === 'notes' || mode === 'paper-notes' ? notesSnapshot?(notesSnapshot.selection.text?notesSnapshot.text:undefined):input.state.note : undefined
   if (note !== undefined && note.length > 100000) throw new Error('AI notes support up to 100,000 characters. Your note has not been sent.')
-  if (mode === 'notes' && !note?.trim()) throw new Error('Write a text note before using Notes only or Organize with AI.')
-  if (mode === 'page' && !input.pageText.trim() && !input.selection.trim()) throw new Error('This page has no readable text yet. Wait for the page to load, or choose a text-based page. Scanned PDFs need OCR.')
+  if (mode === 'notes' && !attachments.length && !(notesSnapshot?hasChatNotesContent(notesSnapshot):note?.trim())) throw new Error(notesSnapshot?'The selected Note sources are empty. Choose another source or attach an image.':'Write a text note before using Notes only or Organize with AI.')
+  if (mode === 'page' && !input.pageText.trim() && !input.selection.trim() && !attachments.length) throw new Error('This page has no readable text yet. Wait for the page to load, or choose a text-based page. Scanned PDFs need OCR.')
   if (mode === 'page' && input.pageText.length > 100000) throw new Error('Current-page context supports up to 100,000 characters. This page has not been sent.')
   if (mode === 'page' && input.selection.length > 30000) throw new Error('Selected passages support up to 30,000 characters. Choose a shorter passage.')
   return {
     requestId: input.requestId, paperId: input.paper.id,
     question: input.action === 'organize-notes' ? organizationPrompt : input.question.trim(),
     action: input.action ?? 'ask',
+    ...(attachments.length?{attachments:structuredClone(attachments)}:{}),
     history: mode === 'notes' ? [] : input.state.messages.filter(item => !item.isDemo).slice(-12).map(({ role, content }) => ({ role, content })),
     context: {
       mode, paperTitle: input.paper.title, page: input.state.lastPage,
       pageText: mode === 'page' ? input.pageText : '',
       ...(mode === 'page' && input.selection ? { selection: input.selection } : {}),
-      ...(note !== undefined ? { note } : {})
+      ...(note !== undefined ? { note } : {}),
+      ...(notesSnapshot?{notesSnapshot:structuredClone(notesSnapshot)}:{})
     }
   }
 }

@@ -1,8 +1,22 @@
+import { SourceEvidenceEditsStore } from './sourceEvidenceEditsStore'
+import {assertExportLocation} from './exportLocationPolicy'
+import {AutomationRuntime,initialManagedDirectory} from './automationMain'
+import { loadSummaryJob, loadSummaryDraft, resumePaperSummary } from './summary'
+import { validateSummaryJobQuery, validateSummaryResumeRequest } from './summaryJobValidation'
+import { AIImageStore } from './aiImageStore'
+import { copyPdfCaptureImage, savePdfCaptureImage } from './captureActions'
+import { saveInfiniteNotebookExport } from './infiniteNotebookExport'
+import { assertSavedCanvasExport } from './infiniteExportScope'
+import { canvasExportPlan } from '../shared/canvasViewport'
+import type { CanvasExportOptions } from '../shared/notebookTypes'
+import { NotebookStore } from './notebookStore'
+import { saveNotebookPngExport } from './notebookPngExport'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, safeStorage } from 'electron'
-import type { IpcMainInvokeEvent } from 'electron'
+import type { IpcMainInvokeEvent,SaveDialogOptions,SaveDialogReturnValue } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { PaperStore } from './storage'
+import { LibraryActivityStore } from './libraryActivityStore'
 import { AIJobs, askDeepSeek, generatePaperSummary } from './deepseek'
 import { object, validId, validateMarks, validateRequest, validateSettings, validateState, validateSummaryRequest } from './validation'
 import type { AppSettings, SettingsInput, AIRequest, PaperState } from '../shared/types'
@@ -21,6 +35,7 @@ import { validatePdfCaptureInput } from './canvasCaptureValidation'
 import { canvasPngFileName, saveCanvasPngExport } from './canvasPngExport'
 import { watchNativeFullscreen } from './desktopFullscreen'
 import { SummaryFigureStore } from './summaryFiguresStore'
+import { SummaryEvidenceStore } from './summaryEvidenceStore'
 import { TableStore } from './tableStore'
 import { saveTableCsvExport, tableCsvFileName } from './tableCsvExport'
 import { ReferenceStore } from './referenceStore'
@@ -35,11 +50,23 @@ import { mindMapPngFileName, saveMindMapPngExport } from './mindMapPngExport'
 import type { AIRequestOwner } from '../shared/types'
 import type { EffectiveAIProgress } from './deepseek'
 
+const decodeImage = (bytes: Uint8Array) => {
+    const image = nativeImage.createFromBuffer(Buffer.from(bytes))
+    return image.isEmpty() ? null : image.getSize()
+  }
+
 let window: BrowserWindow | null = null
+let aiImageStore:AIImageStore
+let automation: AutomationRuntime
 let store: PaperStore
+let libraryActivity: LibraryActivityStore
+let notebookStore: NotebookStore
+let legacyNotebookStore: NotebookStore
 let canvasStore: CanvasStore
 let sourceIndexStore: SourceIndexStore
 let summaryFigureStore: SummaryFigureStore
+let sourceEvidenceEditsStore: SourceEvidenceEditsStore
+let summaryEvidenceStore: SummaryEvidenceStore
 let tableStore: TableStore
 let referenceStore: ReferenceStore
 let diagramStore: DiagramStore
@@ -58,7 +85,7 @@ interface PrivateSettings { model: string; encryptedKey?: string }
 let privateSettings: PrivateSettings = { model: 'deepseek-flash' }
 let settingsTail: Promise<unknown> = Promise.resolve()
 async function flushStores(): Promise<void> {
-  await Promise.all([store.flush(), canvasStore.flush(), diagramStore.flush(), generalStore.flush(), requestHistory.flush(), sourceIndexStore.flush(), summaryFigureStore.flush(), tableStore.flush(), referenceStore.flush(), fileOperations.flush(), settingsTail])
+  await Promise.all([store.flush(), aiImageStore.flush(), libraryActivity.flush(), notebookStore.flush(), legacyNotebookStore.flush(), canvasStore.flush(), diagramStore.flush(), generalStore.flush(), requestHistory.flush(), sourceIndexStore.flush(), sourceEvidenceEditsStore.flush(), summaryFigureStore.flush(), summaryEvidenceStore.flush(), tableStore.flush(), referenceStore.flush(), fileOperations.flush(), settingsTail, automation?.flush()])
 }
 async function reconcileSaved(owner: AIRequestOwner): Promise<void> {
   try {
@@ -119,10 +146,21 @@ async function saveSettings(input: SettingsInput): Promise<AppSettings> {
   })
   settingsTail = operation.catch(() => {}); return operation
 }
+async function protectedSaveDialog(owner:BrowserWindow,options:SaveDialogOptions):Promise<SaveDialogReturnValue>{
+ const selected=await dialog.showSaveDialog(owner,options);
+ if(!selected.canceled&&selected.filePath)await assertExportLocation(selected.filePath,[store.root,...await store.getManagedPdfDirectories()]);
+ return selected;
+}
 function registerIPC(): void {
   const handle = (channel: string, handler: (...args: unknown[]) => unknown) => ipcMain.handle(`paper-reader:${channel}`, (event, ...args: unknown[]) => { trustedSender(event); return handler(...args) })
+  automation.register(handle)
   handle('list', () => store.list())
-  handle('import', () => fileOperations.run(async () => {
+  const requireRealPaper=async(id:unknown)=>{validId(id);if(!(await store.list()).some(p=>p.id===id&&!p.isDemo))throw Error('Import a PDF before using screenshots or AI images.')}
+  handle('save-ai-image',async(id,input)=>{validId(id);return aiImageStore.save(id,input as import('../shared/types').AIImageInput)})
+  handle('read-ai-image',async(id,imageId)=>{validId(id);validId(imageId);return aiImageStore.read(id,imageId)})
+  handle('copy-pdf-capture',async(id,capture)=>{await requireRealPaper(id);copyPdfCaptureImage(capture as import('../shared/types').PdfCaptureInput,decodeImage,bytes=>clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(bytes))))})
+  handle('export-pdf-capture',(id,capture)=>fileOperations.run(async()=>{await requireRealPaper(id);const owner=window;if(!owner)throw Error('Window unavailable');return savePdfCaptureImage(capture as import('../shared/types').PdfCaptureInput,store.root,defaultPath=>protectedSaveDialog(owner,{title:'Save PDF screenshot — choose a new file name',defaultPath,filters:[{name:'PNG image',extensions:['png']}],properties:['showOverwriteConfirmation','createDirectory']}),decodeImage)}))
+  handle('import', () => automation.ensureDirectory().then(() => fileOperations.run(async () => {
     if (!window) throw new Error('Window unavailable')
     if (importing || exportingTable || exportingCanvas) throw new Error('Finish the current file dialog before importing a PDF.')
     importing = true
@@ -130,7 +168,7 @@ function registerIPC(): void {
       const selection = await dialog.showOpenDialog(window, { title: 'Import PDF', properties: ['openFile'], filters: [{ name: 'PDF documents', extensions: ['pdf'] }] })
       return selection.canceled || !selection.filePaths[0] ? null : await store.importPdf(selection.filePaths[0])
     } finally { importing = false }
-  }))
+  })))
   handle('read', id => { validId(id); return store.readPdf(id) })
   handle('load-state', id => { validId(id); return store.loadState(id) })
   handle('save-state', async (id, state) => {
@@ -143,6 +181,8 @@ function registerIPC(): void {
   handle('load-summary', id => { validId(id); return store.loadSummary(id) })
   handle('load-marks', id => { validId(id); return store.loadMarks(id) })
   handle('save-marks', (id, marks) => { validId(id); validateMarks(marks); return store.saveMarks(id, marks) })
+  handle('load-library-activity', () => libraryActivity.load())
+  handle('record-paper-opened', id => { validId(id); return libraryActivity.record(id) })
   handle('load-library-organization', () => store.loadLibraryOrganization())
   handle('create-category', name => store.createCategory(validateCategoryName(name)))
   handle('rename-category', (id, name) => { validateCategoryId(id); return store.renameCategory(id, validateCategoryName(name)) })
@@ -151,6 +191,9 @@ function registerIPC(): void {
   handle('save-paper-metadata', (id, input) => { validId(id); return store.savePaperMetadata(id, normalizePaperMetadata(input)) })
   handle('load-pdf-ink', id => { validId(id); return store.loadPdfInk(id) })
   handle('save-pdf-ink', (id, ink) => { validId(id); validatePdfInk(ink); return store.savePdfInk(id, ink) })
+  handle('load-canvas-notebook', id => { validId(id); return localDataOperation('Canvas notebook', () => notebookStore.load(id)) })
+  handle('save-canvas-notebook', (id, value) => { validId(id); return localDataOperation('Canvas notebook', () => notebookStore.save(id, value)) })
+  handle('read-canvas-highlight', (id, highlightId) => { validId(id); validId(highlightId); return localDataOperation('Canvas highlight', () => notebookStore.readHighlight(id, highlightId)) })
   handle('load-canvas', id => { validId(id); return localDataOperation('Canvas', () => canvasStore.load(id)) })
   handle('save-canvas', (id, value) => { validId(id); return localDataOperation('Canvas', () => canvasStore.save(id, value)) })
   handle('load-canvas-diagram', id => { validId(id); return localDataOperation('Canvas diagram', () => diagramStore.loadDiagram(id)) })
@@ -162,7 +205,7 @@ function registerIPC(): void {
     validId(id)
     const owner = window
     if (!owner) throw new Error('Window unavailable')
-    await canvasStore.load(id)
+    await notebookStore.load(id)
     const selection = await dialog.showOpenDialog(owner, { title: 'Insert canvas image', properties: ['openFile'], filters: [{ name: 'PNG or JPEG images', extensions: ['png', 'jpg', 'jpeg'] }] })
     if (selection.canceled || !selection.filePaths[0]) return null
     const image = await prepareCanvasImage(selection.filePaths[0], bytes => {
@@ -171,10 +214,6 @@ function registerIPC(): void {
     })
     return canvasStore.importImage(id, image.bytes, image.info)
   })))
-  const decodeImage = (bytes: Uint8Array) => {
-    const image = nativeImage.createFromBuffer(Buffer.from(bytes))
-    return image.isEmpty() ? null : image.getSize()
-  }
   handle('save-canvas-capture', (id, input) => localDataOperation('Canvas capture', async () => {
     validId(id); validatePdfCaptureInput(input)
     return canvasStore.importCapture(id, input, decodeImage)
@@ -191,8 +230,55 @@ function registerIPC(): void {
       const paper = (await store.list()).find(item => item.id === id)
       if (!paper || paper.isDemo) throw new Error('Import a PDF before exporting Canvas.')
       const information = (await store.loadLibraryMetadata())[id]
-      return await saveCanvasPngExport(bytes, canvasPngFileName(information?.title ?? paper.title), store.root, defaultPath => dialog.showSaveDialog(owner, {
+      return await saveCanvasPngExport(bytes, canvasPngFileName(information?.title ?? paper.title), store.root, defaultPath => protectedSaveDialog(owner, {
         title: 'Export full Canvas PNG — choose a new file name', defaultPath,
+        filters: [{ name: 'PNG image', extensions: ['png'] }], properties: ['showOverwriteConfirmation', 'createDirectory']
+      }), decodeImage)
+    } finally { exportingCanvas = false }
+  })))
+  handle('export-canvas-region', (id, pageId, rawOptions, rawImages) => fileOperations.run(() => localDataOperation('Canvas region export', async () => {
+    validId(id); validId(pageId)
+    const options=structuredClone(rawOptions) as CanvasExportOptions
+    canvasExportPlan(options)
+    if(!Array.isArray(rawImages) || rawImages.length>50 || rawImages.some(value=>!(value instanceof Uint8Array)) || rawImages.reduce((total,value)=>total+value.byteLength,0)>64*1024*1024) throw new Error('Invalid or oversized Canvas export images')
+    const images=rawImages.map(value=>new Uint8Array(value))
+    const owner=window
+    if(!owner) throw new Error('Window unavailable')
+    if(exportingCanvas || exportingTable || importing) throw new Error('Finish the current file dialog before exporting Canvas.')
+    exportingCanvas=true
+    try {
+      await notebookStore.flush()
+      const notebook=await notebookStore.load(id),page=notebook.pages.find(value=>value.id===pageId)
+      if(!page) throw new Error('Canvas board not found. Export was stopped.')
+      await assertSavedCanvasExport(page,options,assetId=>canvasStore.readImage(id,assetId))
+      const paper=(await store.list()).find(value=>value.id===id&&!value.isDemo)
+      if(!paper) throw new Error('Import a PDF before exporting Canvas.')
+      const metadata=(await store.loadLibraryMetadata())[id]
+      const suggested=canvasPngFileName(metadata?.title??paper.title).replace(/-canvas\.png$/,'-canvas-'+options.scope+'.'+options.format)
+      return await saveInfiniteNotebookExport(images,suggested,store.root,page,options,defaultPath=>protectedSaveDialog(owner,{
+        title:'Export Canvas '+options.format.toUpperCase()+' — choose a new file name',defaultPath,
+        filters:[{name:options.format==='pdf'?'PDF document':'PNG image',extensions:[options.format]}],properties:['showOverwriteConfirmation','createDirectory']
+      }),decodeImage)
+    } finally {exportingCanvas=false}
+  })))
+  handle('export-canvas-page-png', (id, pageId, bytes) => fileOperations.run(() => localDataOperation('Canvas page export', async () => {
+    validId(id); validId(pageId)
+    if (!(bytes instanceof Uint8Array)) throw new Error('Invalid canvas page PNG')
+    const owner = window
+    if (!owner) throw new Error('Window unavailable')
+    if (exportingCanvas || exportingTable || importing) throw new Error('Finish the current file dialog before exporting Canvas.')
+    exportingCanvas = true
+    try {
+      await notebookStore.flush()
+      const notebook = await notebookStore.load(id)
+      const page = notebook.pages.find(value => value.id === pageId)
+      if (!page) throw new Error('Canvas page not found. Export was stopped.')
+      const paper = (await store.list()).find(value => value.id === id && !value.isDemo)
+      if (!paper) throw new Error('Import a PDF before exporting Canvas.')
+      const metadata = (await store.loadLibraryMetadata())[id]
+      const suggested = canvasPngFileName(metadata?.title ?? paper.title).replace(/-canvas\.png$/, '-canvas-page-' + (notebook.pages.indexOf(page) + 1) + '.png')
+      return await saveNotebookPngExport(bytes, suggested, store.root, page, defaultPath => protectedSaveDialog(owner, {
+        title: 'Export complete Canvas page PNG — choose a new file name', defaultPath,
         filters: [{ name: 'PNG image', extensions: ['png'] }], properties: ['showOverwriteConfirmation', 'createDirectory']
       }), decodeImage)
     } finally { exportingCanvas = false }
@@ -210,13 +296,19 @@ function registerIPC(): void {
       const paper = (await store.list()).find(item => item.id === id && !item.isDemo)
       if (!paper) throw new Error('Import a PDF before exporting Mind map.')
       const information = (await store.loadLibraryMetadata())[id]
-      return await saveMindMapPngExport(bytes, mindMapPngFileName(information?.title ?? paper.title), store.root, defaultPath => dialog.showSaveDialog(owner, {
+      return await saveMindMapPngExport(bytes, mindMapPngFileName(information?.title ?? paper.title), store.root, defaultPath => protectedSaveDialog(owner, {
         title: 'Export complete Mind map PNG — choose a new file name', defaultPath,
         filters: [{ name: 'PNG image', extensions: ['png'] }], properties: ['showOverwriteConfirmation', 'createDirectory']
       }), decodeImage)
     } finally { exportingCanvas = false }
   })))
   handle('save-source-index', (id, value) => { validId(id); return localDataOperation('Source index', () => sourceIndexStore.save(id, value)) })
+  handle('load-source-evidence-edits', id => { validId(id); return localDataOperation('Source evidence edits', () => sourceEvidenceEditsStore.load(id)) })
+  handle('save-source-evidence-caption', (id, input) => { validId(id); return localDataOperation('Source evidence edits', () => sourceEvidenceEditsStore.saveCaption(id, input)) })
+  handle('set-source-evidence-hidden', (id, input) => { validId(id); return localDataOperation('Source evidence edits', () => sourceEvidenceEditsStore.setHidden(id, input)) })
+  handle('load-summary-evidence', id => { validId(id); return localDataOperation('Summary evidence', () => summaryEvidenceStore.load(id)) })
+  handle('save-summary-evidence-capture', (id, input) => { validId(id); return localDataOperation('Summary evidence', () => summaryEvidenceStore.save(id, input, decodeImage)) })
+  handle('reset-summary-evidence-crop', (id, entryId) => { validId(id); validId(entryId); return localDataOperation('Summary evidence', () => summaryEvidenceStore.reset(id, entryId)) })
   handle('load-summary-figures', id => { validId(id); return localDataOperation('Summary figures', () => summaryFigureStore.load(id)) })
   handle('save-summary-figure', (id, input) => { validId(id); return localDataOperation('Summary figure', () => summaryFigureStore.save(id, input, decodeImage)) })
   handle('reset-summary-figure', (id, entryId) => { validId(id); validId(entryId); return localDataOperation('Summary figure', () => summaryFigureStore.reset(id, entryId)) })
@@ -235,7 +327,7 @@ function registerIPC(): void {
       const paper = (await store.list()).find(value => value.id === id && !value.isDemo)
       if (!paper) throw new Error('Import a PDF before exporting tables.')
       const metadata = (await store.loadLibraryMetadata())[id]
-      return await saveTableCsvExport(table, tableCsvFileName(metadata?.title ?? paper.title, table.label), store.root, defaultPath => dialog.showSaveDialog(owner, {
+      return await saveTableCsvExport(table, tableCsvFileName(metadata?.title ?? paper.title, table.label), store.root, defaultPath => protectedSaveDialog(owner, {
         title: 'Export experimental table CSV — choose a new file name', defaultPath,
         filters: [{ name: 'CSV table', extensions: ['csv'] }], properties: ['showOverwriteConfirmation', 'createDirectory']
       }))
@@ -255,7 +347,7 @@ function registerIPC(): void {
     const information = (await store.loadLibraryMetadata())[id]
     const effectivePaper = information ? { ...paper, ...information } : paper
     const content = formatReadingExport(effectivePaper, state, marks, summary, ink)
-    return saveMarkdownExport(content, readingExportFileName(effectivePaper.title), defaultPath => dialog.showSaveDialog(owner, {
+    return saveMarkdownExport(content, readingExportFileName(effectivePaper.title), defaultPath => protectedSaveDialog(owner, {
       title: 'Export reading notes', defaultPath,
       filters: [{ name: 'Markdown document', extensions: ['md'] }],
       properties: ['showOverwriteConfirmation', 'createDirectory']
@@ -265,7 +357,7 @@ function registerIPC(): void {
     validId(id)
     const owner = window
     if (!owner) throw new Error('Window unavailable')
-    return exportAnnotatedPdf(store, id, defaultPath => dialog.showSaveDialog(owner, {
+    return exportAnnotatedPdf(store, id, defaultPath => protectedSaveDialog(owner, {
       title: 'Export annotated PDF — choose a new file name', defaultPath,
       filters: [{ name: 'PDF document', extensions: ['pdf'] }],
       properties: ['showOverwriteConfirmation', 'createDirectory']
@@ -288,7 +380,7 @@ function registerIPC(): void {
       await store.loadState(request.paperId)
       return askDeepSeek(request, model, decryptKey(), signal, fetch, progress => {
         if (!signal.aborted && window === owner && !owner.isDestroyed() && !sender.isDestroyed() && sender.mainFrame === frame && frame.url === loadedUrl) sender.send('paper-reader:ai-progress', progress)
-      })
+      },(paperId,imageId)=>aiImageStore.read(paperId,imageId))
     })
   })
   handle('load-general-chat', () => localDataOperation('General chat', () => generalStore.load()))
@@ -320,8 +412,16 @@ function registerIPC(): void {
     validateSummaryRequest(value)
     return activeRequests.run(value.requestId, value.paperId, 'summary', signal => generatePaperSummary(store, value, privateSettings.model, decryptKey(), signal))
   })
-  handle('cancel-ai', async id => {
+  handle('load-summary-job', value => loadSummaryJob(store, validateSummaryJobQuery(value), privateSettings.model))
+  handle('load-summary-draft', value => loadSummaryDraft(store, validateSummaryJobQuery(value), privateSettings.model))
+  handle('resume-summary', value => {
+    const request = validateSummaryResumeRequest(value)
+    return activeRequests.run(request.requestId, request.paperId, 'summary', signal => resumePaperSummary(store, request, privateSettings.model, decryptKey(), signal))
+  })
+  handle('cancel-ai', async (id,options) => {
     validId(id); activeRequests.cancel(id)
+    if(options!==undefined){object(options);if(Object.keys(options).some(k=>k!=='keepAgent')||typeof options.keepAgent!=='boolean')throw Error('Invalid cancellation options')}
+    if(!options?.keepAgent)await automation.cancelClient(id)
     const owner = recordedOwners.get(id)
     if (owner) { await requestHistory.settle(owner, id, 'cancelled').catch(() => undefined); recordedOwners.delete(id) }
   })
@@ -343,7 +443,7 @@ function registerIPC(): void {
     if (!['minimize', 'maximize', 'close'].includes(action as string)) throw new Error('Invalid window action')
     if (action === 'minimize') window?.minimize()
     if (action === 'maximize') { if (window?.isMaximized()) window.unmaximize(); else window?.maximize() }
-    if (action === 'close') { referenceStore.cancelAll(); await flushStores(); window?.close() }
+    if (action === 'close') { window?.close() }
   })
 }
 async function createWindow(): Promise<void> {
@@ -359,6 +459,15 @@ async function createWindow(): Promise<void> {
   const stopFullscreen = watchNativeFullscreen(owner, value => {
     if (window === owner && !owner.isDestroyed()) owner.webContents.send('paper-reader:fullscreen-change', value)
   })
+  owner.webContents.session.setPermissionCheckHandler((contents,permission,_origin,details)=>{
+    if(contents!==owner.webContents||permission!=='media'||owner.webContents.mainFrame.url!==loadedUrl||details.isMainFrame===false)return false
+    const kind=(details as unknown as {mediaType?:string}).mediaType
+    return kind==='audio'?automation.devices.microphone:kind==='video'?automation.devices.camera:automation.devices.microphone||automation.devices.camera
+  })
+  owner.webContents.session.setPermissionRequestHandler((contents,permission,callback,details)=>{
+    const media=(details as unknown as {mediaTypes?:string[]}).mediaTypes
+    callback(contents===owner.webContents&&owner.webContents.mainFrame.url===loadedUrl&&permission==='media'&&details.isMainFrame!==false&&Array.isArray(media)&&media.length>0&&media.every(kind=>kind==='audio'?automation.devices.microphone:kind==='video'?automation.devices.camera:false))
+  })
   owner.once('closed', stopFullscreen)
   window.webContents.on('will-navigate', (event, url) => { if (url !== loadedUrl) event.preventDefault() })
   window.webContents.on('will-attach-webview', event => event.preventDefault())
@@ -367,6 +476,7 @@ async function createWindow(): Promise<void> {
   window.on('close', event => {
     if (closeReady) return
     event.preventDefault()
+    automation?.cancelAll()
     activeRequests.cancelAll()
     referenceStore.cancelAll()
     void flushStores().then(() => { closeReady = true; window?.close() }).catch(() => { dialog.showErrorBox('Save before closing', 'Local edits could not be saved. Keep this window open and try again. Existing files were preserved.') })
@@ -375,9 +485,13 @@ async function createWindow(): Promise<void> {
   if (developmentUrl) await window.loadURL(developmentUrl); else await window.loadFile(productionPath)
 }
 app.whenReady().then(async () => {
-  store = new PaperStore(process.env.PAPER_READER_DATA_DIR || app.getPath('userData'))
+  store = new PaperStore(process.env.PAPER_READER_DATA_DIR || app.getPath('userData'), {managedDirectory:await initialManagedDirectory()})
+  aiImageStore = new AIImageStore(store.root, async id=>{if(!(await store.list()).some(p=>p.id===id&&!p.isDemo))throw Error('AI image paper not found')},bytes=>{const size=decodeImage(bytes);if(!size)throw Error('AI image could not be decoded');return size})
+  libraryActivity = new LibraryActivityStore(store)
   canvasStore = new CanvasStore(store)
   diagramStore = new DiagramStore(store)
+  legacyNotebookStore = new NotebookStore(store, canvasStore, diagramStore)
+  notebookStore = new NotebookStore(store, canvasStore, diagramStore, { infinite: true, legacy: legacyNotebookStore })
   generalStore = new GeneralChatStore(store)
   const readMessages = async (owner: AIRequestOwner) => {
     if (owner.scope === 'paper') return (await store.loadState(owner.paperId)).messages
@@ -386,9 +500,11 @@ app.whenReady().then(async () => {
     return state.messages
   }
   requestHistory = new RequestHistoryStore(store, readMessages)
-  recordedAI = new RecordedAIService({ history: requestHistory, readMessages, readGeneral: () => generalStore.load() })
+  recordedAI = new RecordedAIService({ history: requestHistory, readMessages, readGeneral: () => generalStore.load(), readAIImage:(paperId,imageId)=>aiImageStore.read(paperId,imageId) })
   sourceIndexStore = new SourceIndexStore(store)
+  sourceEvidenceEditsStore = new SourceEvidenceEditsStore(store, sourceIndexStore)
   summaryFigureStore = new SummaryFigureStore(store, canvasStore, sourceIndexStore)
+  summaryEvidenceStore = new SummaryEvidenceStore(store, canvasStore, sourceIndexStore, summaryFigureStore)
   tableStore = new TableStore(store)
   referenceStore = new ReferenceStore(store, sourceIndexStore, (input, init) => fetch(input, init))
   try {
@@ -400,6 +516,7 @@ app.whenReady().then(async () => {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') dialog.showErrorBox('Settings recovery', 'Saved settings could not be read. Files were preserved. Enter your settings again.')
   }
+  automation = new AutomationRuntime({store,notebookStore,diagramStore,canvasStore,images:aiImageStore,references:referenceStore,general:generalStore,requests:activeRequests,files:fileOperations,window:()=>window,loadedUrl:()=>loadedUrl,model:()=>privateSettings.model,key:decryptKey})
   registerIPC(); await createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow() })
 }).catch(() => { dialog.showErrorBox('Paper Reader', 'The desktop application could not start. Verify the local build and data directory.'); app.quit() })

@@ -140,3 +140,10 @@ test('autosave callback rechecks active editing even when its scheduling notific
     assert.equal(saved.length, 0); assert.equal(session.editing, true)
   } finally { autosave.stop() }
 })
+
+test('legacy Canvas pen accepts six-digit custom color while rejecting malformed input', async () => {
+  const { session, saved } = fixture(); await session.open('paper-one')
+  session.setColor('#123abc'); session.addText(); await session.flush()
+  assert.equal((saved[0].value.objects[0] as {color:string}).color, '#123abc')
+  session.setColor('red'); assert.equal(session.color, '#123abc')
+})

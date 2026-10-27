@@ -12,3 +12,29 @@ dist/
 !/scripts/package.mjs
 /docs/*
 !/docs/2026-10-08-v020-guide.md
+
+!/docs/2026-10-08-v021-guide.md
+
+!/docs/2026-10-26-v022-guide.md
+
+!/docs/2026-10-26-v023-guide.md
+
+# Reproducible 0.3.0 runtime preparation; binaries are not source.
+!/scripts/prepare-local-input.mjs
+!/docs/2026-10-27-v030-guide.md
+/resources/local-input/cache/
+/resources/local-input/downloads/
+/resources/local-input/whisper/
+/resources/local-input/vision/
+
+/resources/local-input/models/
+
+!/docs/2026-10-27-v031-guide.md
+
+!docs/2026-10-27-v032-guide.md
+
+!docs/2026-10-27-v033-guide.md
+
+# Current release guide and credential-file exclusion.
+!docs/2026-10-28-v040-guide.md
+token.env

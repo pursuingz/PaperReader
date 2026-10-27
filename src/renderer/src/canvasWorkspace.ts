@@ -1,3 +1,4 @@
+import { isHexColor } from '../../shared/colors'
 import type { CanvasDocument, CanvasImageAsset, CanvasImageData, CanvasImageSource, CanvasObject, DesktopAPI, NoteExportResult, PdfCaptureInput } from '../../shared/types'
 import { canvasColors, validateCanvasDocument, validateCanvasImageAsset } from '../../main/canvasValidation'
 import { validateCanvasSource } from '../../main/canvasCaptureValidation'
@@ -71,7 +72,7 @@ export class CanvasSession {
   finish() { const gesture = this.gesture; this.gesture = null; if (gesture) { this.checkpoint(gesture.before); this.notify() } }
   select(id: string | null) { if (this.exporting) return; this.finish(); this.selectedId = id && this.document.objects.some(object => object.id === id) ? id : null; this.notify() }
   setMode(mode: CanvasMode) { if (this.exporting) return; this.finish(); this.mode = mode; this.notify() }
-  setColor(color: string) { if (this.exporting || !canvasColors.includes(color as typeof canvasColors[number])) return; this.finish(); this.color = color; this.notify() }
+  setColor(color: string) { if (this.exporting || !isHexColor(color)) return; this.finish(); this.color = color; this.notify() }
   addText(): string | null {
     if (!this.ready || this.exporting) return null
     const id = crypto.randomUUID(), offset = Math.min(this.document.objects.length % 8 * 24, 168)

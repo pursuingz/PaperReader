@@ -16,10 +16,14 @@
 .paper-information-editor > p { font-size: 11px; color: #8b97a8; line-height: 1.8; }
 .paper-information-editor > label { display: block; font-size: 11px; font-weight: 600; margin: 19px 0; }
 .paper-information-editor label small { float: right; font-size: 9px; color: #96a1b0; font-weight: 400; }
-.paper-information-editor input { display: block; width: 100%; margin-top: 8px; padding: 11px; border: 1px solid #e4e9f0; border-radius: 7px; background: #fbfcfd; font-size: 11px; }
+.paper-information-editor input, .paper-information-editor select { display: block; width: 100%; margin-top: 8px; padding: 11px; border: 1px solid #e4e9f0; border-radius: 7px; background: #fbfcfd; font-size: 11px; }
 .paper-information-editor input::placeholder { color: #b1bac7; }
 .paper-information-editor .paper-information-file { font-size: 9px; margin: 14px 0 20px; overflow-wrap: anywhere; }
 .paper-information-file span { color: #758498; }
 .paper-information-editor .paper-information-error { color: #a46d43; background: #fff8ed; border: 1px solid #f1e1c8; border-radius: 6px; padding: 8px 10px; }
 .paper-information-buttons { display: flex; gap: 10px; justify-content: flex-end; }
 .paper-information-buttons .secondary-button { margin-top: 0; }
+
+.paper-information-editor select { color: var(--ink); }
+.paper-category-status { margin: -8px 0 14px; padding: 9px 11px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: #8591a1; background: #f7f9fc; border-radius: 6px; font-size: 10px; line-height: 1.7; }
+.paper-category-status button { border: 1px solid #ead4da; color: #ba6377; background: #fff; border-radius: 5px; padding: 4px 7px; font-size: 10px; }

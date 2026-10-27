@@ -1,12 +1,43 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import AgentTasksPanel from './components/AgentTasksPanel';
+import AgentTurnActivity from './components/AgentTurnActivity';
+import AgentResultDialog, {type AgentResultSelection} from './components/AgentResultDialog';
+import {useAgentChatTurns} from './useAgentChatTurns';
+import {projectAgentChatMessages} from './agentChatProjection';
+import {projectAgentChatDisplay,agentChatPreviewForTurn} from './agentChatDisplay';
+import {buildScopedAgentInput,type ChatContextChoice,type GeneralContextChoice} from './agentContextInput';
+import './components/AgentTurnActivity.css';
+import {VoiceInputControls, type VoiceInputController} from './components/VoiceInputControls';
+import {VoiceDraftProjection} from './voiceDraftProjection';
+import {readVoiceDraftRevision} from './voiceDraftRevision';
+import {readerScrollAmount} from './readingScroll';
+import {stableReaderSize} from './readerSize';
+import type {VoiceTranscriptFinishOptions} from '../../shared/localInputTypes';
+import {installAutomationRenderer} from './automationRenderer';
+import {agentChatInput,agentChatContent} from './agentTaskPresentation';
+import type {AgentTask,AgentOwner,AgentChatTurn,AgentReceipt,InteractionCommand,LocalInputOwner} from '../../shared/types';
+import './components/automation.css';
+import ChatImageStrip from './components/ChatImageStrip';
+import ChatNotesSources from './components/ChatNotesSources';
+import {buildChatNotesSnapshot} from './chatNotesContext';
+import {rasterNotebookRegion} from './notebookRaster';
+import {DEFAULT_CHAT_NOTES_SELECTION, AI_IMAGE_LIMIT} from '../../shared/aiSourceTypes';
+import type {AIImageReference, ChatNotesSelection, ChatNotesSnapshot, PdfCaptureAction} from '../../shared/types';
+import type { CanvasExportOptions,CanvasRegion } from '../../shared/notebookTypes';
+import { notebookContentBounds,notebookSelectionBounds } from './notebookGeometry';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pdfjs } from 'react-pdf';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
-import { ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Clock3, FileText, Library, Maximize2, MessageCircle, Minus, PanelRightClose, PanelRightOpen, Plus, Search, Settings, Sparkles, StickyNote, Tag, X, ZoomIn, ZoomOut, PenLine, Undo2, Redo2, Eraser, Download, Hand, ScanLine, Home, Minimize2 } from 'lucide-react';
-import type { AIContextMode, AIRequest, AIRequestRecord, AppSettings, ChatMessage, DesktopCommand, DesktopMenuState, LibraryMetadata, NormalizedRect, Paper, PaperMetadata, PaperState, PdfCaptureInput, ReadingMarks } from '../../shared/types';
+import { ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, Check, ChevronLeft, ChevronRight, Clock3, FileText, Library, Maximize2, MessageCircle, Minus, PanelRightClose, PanelRightOpen, Plus, Search, Settings, Sparkles, StickyNote, Tag, X, ZoomIn, ZoomOut, PenLine, Undo2, Redo2, Eraser, Download, Hand, ScanLine, Home, Minimize2, History } from 'lucide-react';
+import type { AIContextMode, AIRequest, AIRequestRecord, AppSettings, ChatMessage, DesktopCommand, DesktopMenuState, DesktopAPI, LibraryMetadata, NormalizedRect, Paper, PaperMetadata, PaperState, PdfCaptureInput, ReadingMarks } from '../../shared/types';
 import { ORGANIZE_NOTES_DISPLAY_QUESTION } from '../../shared/aiPrompts';
 import useGeneralChat from './useGeneralChat';
+import useLibraryActivity from './useLibraryActivity';
+import ColorPicker from './components/ColorPicker';
+import AppToast, { type ToastMessage, type ToastTone } from './components/AppToast';
+import { EVIDENCE_DRAG_MIME } from './evidenceDrag';
+import './sidebarCards.css';
 import GeneralChatPanel from './components/GeneralChatPanel';
 import useAIRequestHistory from './useAIRequestHistory';
 import RequestRetryButton from './components/RequestRetryButton';
@@ -35,8 +66,11 @@ import useReadingMarks from './useReadingMarks';
 import usePaperSummary from './usePaperSummary';
 import usePdfInk from './usePdfInk';
 import useCanvasWorkspace from './useCanvasWorkspace';
-import NoteCanvas from './components/NoteCanvas';
-import SourceIndexPanel from './components/SourceIndexPanel';
+import useNotebookWorkspace from './useNotebookWorkspace';
+import NotebookCanvas from './components/NotebookCanvas';
+import StandaloneMindMap from './components/StandaloneMindMap';
+import { copySavedSourceToNotebook, finishAndFlushNoteWorkspaces, exportNotebookRegion, exportStandaloneMap, switchNoteWorkspace } from './noteWorkspaceIntegration';
+import SummaryEvidencePanel from './components/SummaryEvidencePanel';
 import ConversationSearch from './components/ConversationSearch';
 import QuestionActions from './components/QuestionActions';
 import QuestionReuseReview from './components/QuestionReuseReview';
@@ -51,7 +85,7 @@ import { isReadingScrollKey, resolveDesktopKey, type DesktopKeyAction } from './
 import { saveNavigationPage, checkHistoryPdf, historyContentReady } from './pageNavigation';
 import { FocusPositionRestore, RenderPositionRestore, type FocusPosition } from './focusPosition';
 import './readingFocus.css';
-import { appendAIResponse, createQuestionSnapshot, flushBeforeExport, scopeDescriptions, WholePaperReader, withExtractedPages } from './readingWorkflow';
+import { appendAIResponse, createQuestionSnapshot, flushBeforeExport, WholePaperReader, withExtractedPages } from './readingWorkflow';
 import { normalizedRects } from './readingFeatures';
 import './readingFeatures.css';
 import './readingWorkflow.css';
@@ -74,6 +108,27 @@ export default function App() {
     const [rightView, setRightView] = useState<'chat' | 'note'>('chat');
     const [rightOpen, setRightOpen] = useState(true);
     const [rightWidth, setRightWidth] = useState(330);
+    const [generalContext,setGeneralContext]=useState<GeneralContextChoice>('library');
+    const generalContextCurrent=useRef(generalContext);generalContextCurrent.current=generalContext;
+    const generalTaskScopes=useRef(new Map<string,GeneralContextChoice>());
+    const generalOwnerCurrent=useRef('');
+    const [taskHistoryOwner,setTaskHistoryOwner]=useState<AgentOwner|null>(null);
+    const [agentResult,setAgentResult]=useState<AgentResultSelection|null>(null);
+    const [turnActionBusy,setTurnActionBusy]=useState('');
+    const turnActionSequence=useRef(0),reanswerPreparation=useRef<string|null>(null);
+    const voiceController=useRef<VoiceInputController|null>(null);
+    const registerVoiceController=useCallback((controller:VoiceInputController)=>{voiceController.current=controller;return()=>{if(voiceController.current===controller)voiceController.current=null}},[]);
+    const manualVoiceSending=useRef(false);
+    const noteAppendCompletion=useRef<Promise<void>>(Promise.resolve());
+    const noteAppendActive=useRef(false);
+    const navigationIntent=useRef(0),importedOpenSequence=useRef(0),libraryReloadSequence=useRef(0);
+    const latestOpenPaper=useRef(openPaper);latestOpenPaper.current=openPaper;
+    const speechSourceTuple=useRef<unknown[]>([]);
+    const [libraryRevision,setLibraryRevision]=useState(0);
+    const currentAgentTask=useRef<{requestId:string;taskId:string;owner:{kind:'paper'|'general';id:string}}|null>(null);
+    const automationHandlers=useRef({prepare:async(_id:string)=>{},append:async(_job:import('../../shared/renderJobTypes').AutomationRenderJob)=>{},region:async(_job:Extract<import('../../shared/renderJobTypes').AutomationRenderJob,{kind:'canvas-region'}>):Promise<CanvasRegion|null>=>null});
+    const liveVoiceDraft=useRef(new VoiceDraftProjection());
+    const speechDraft=useRef({paperText:'',paperRevision:0,generalText:'',generalRevision:0,contextKey:'',contextRevision:0});
     const [query, setQuery] = useState('');
     const [sort, setSort] = useState<'time' | 'category'>('time');
     const [bytes, setBytes] = useState<Uint8Array | null>(null);
@@ -103,13 +158,20 @@ export default function App() {
     const [question, setQuestion] = useState('');
     const draftCurrent = useRef(''); draftCurrent.current = question;
     const paperDrafts = useRef(new Map<string, string>());
+    const [chatImages,setChatImages]=useState<AIImageReference[]>([]),chatImagesCurrent=useRef(chatImages);chatImagesCurrent.current=chatImages;
+    const paperImageDrafts=useRef(new Map<string,AIImageReference[]>());
+    const [notesSources,setNotesSources]=useState<ChatNotesSelection>(()=>structuredClone(DEFAULT_CHAT_NOTES_SELECTION)),notesSourcesCurrent=useRef(notesSources);notesSourcesCurrent.current=notesSources;
+    const paperNotesDrafts=useRef(new Map<string,ChatNotesSelection>());
+    const [sentImages,setSentImages]=useState<Record<string,AIImageReference[]>>({});
+    const preparingRequest=useRef<string|null>(null);
+
     const questionInput = useRef<HTMLTextAreaElement>(null);
     const [reuseReview, setReuseReview] = useState<QuestionReview | null>(null);
     const [reuseError, setReuseError] = useState('');
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const conversationSearchActive = useRef(false);
     const [conversationSession, setConversationSession] = useState(0);
-    const [contextMode, setContextMode] = useState<AIContextMode>('page');
+    const [contextMode, setContextMode] = useState<ChatContextChoice>('page');
     const [requestStatus, setRequestStatus] = useState('');
     const [preview, setPreview] = useState<StreamPreview | null>(null);
     const progressSubscription = useRef<(() => void) | null>(null);
@@ -121,16 +183,29 @@ export default function App() {
     const [stateReady, setStateReady] = useState(false);
     const [transitioning, setTransitioning] = useState(false);
     const interactionLocked = useRef(false);
-    const [notice, setNotice] = useState('');
+    const [toast, setToast] = useState<ToastMessage | null>(null);
+    const toastSequence = useRef(0);
+    const setNotice = useCallback((message: string, tone: ToastTone = 'warning') => { setToast(message ? { id: ++toastSequence.current, message, tone } : null); }, []);
+    const dismissNotice = useCallback((id: number) => setToast(current => current?.id === id ? null : current), []);
+    const activity = useLibraryActivity(api, setNotice);
+    const noteCommit = useRef<(() => Promise<void>) | null>(null);
+    const committingNote = useRef(0);
+    const registerNoteCommit = useCallback((commit: () => Promise<void>) => { noteCommit.current = commit; return () => { if (noteCommit.current === commit) noteCommit.current = null; }; }, []);
     const marks = useReadingMarks(api, setNotice);
     const summary = usePaperSummary(api, setNotice);
+    const [summaryDetail, setSummaryDetail] = useState(false);
+    useEffect(() => { setSummaryDetail(false); }, [paper?.id, readerView]);
     const summaryStatus = useRef({ paperId: null as string | null, summaryReady: false });
     summaryStatus.current = { paperId: paper?.id ?? null, summaryReady: summary.ready && (!summary.value || summary.value.paperId === paper?.id) };
     const pdfInk = usePdfInk(api, setNotice);
     const canvas = useCanvasWorkspace(api, setNotice);
-    const canvasBoardReady = !!paper && canvas.paperId === paper.id && (canvas.boardMode === 'mind-map' ? canvas.mapReady && canvas.mindMap.paperId === paper.id : canvas.ready && canvas.diagramReady && canvas.diagram.paperId === paper.id);
-    const canvasBoardStatus = canvas.boardMode === 'mind-map' ? canvas.mapStatus : !canvas.ready ? canvas.status : canvas.diagramStatus;
-    const canvasBoardCount = canvas.boardMode === 'mind-map' ? canvas.mindMap.nodes.length : canvas.document.objects.length + canvas.diagram.shapes.length + canvas.diagram.arrows.length + canvas.diagram.connections.length;
+    const canvasCurrent = useRef(canvas); canvasCurrent.current = canvas;
+    const notebook = useNotebookWorkspace(api, setNotice);
+    const notebookCurrent = useRef(notebook); notebookCurrent.current = notebook;
+    const canvasBoardReady = !!paper && !paper.isDemo && notebook.paperId === paper.id && notebook.ready && !notebook.busy && !!notebook.activePage;
+    const mapBoardReady = !!paper && !paper.isDemo && canvas.paperId === paper.id && canvas.mapReady && canvas.mindMap.paperId === paper.id;
+    const canvasBoardStatus = notebook.status;
+    const canvasBoardCount = notebook.activePage ? notebook.activePage.objects.length + notebook.activePage.diagram.shapes.length + notebook.activePage.diagram.arrows.length + notebook.activePage.diagram.connections.length : 0;
     const pdfSearch = usePdfSearch(api, paper && !paper.isDemo ? paper.id : null);
     const [searchOpen, setSearchOpen] = useState(false);
     const [navigationOpen, setNavigationOpen] = useState(false);
@@ -149,7 +224,22 @@ export default function App() {
     const [apiKey, setApiKey] = useState('');
     const [savingSettings, setSavingSettings] = useState(false);
     const [requestId, setRequestId] = useState<string | null>(null);
-    const generalChat = useGeneralChat(api, { hasApiKey: settings.hasApiKey, onSettings: () => setSettingsOpen(true), onNotice: setNotice, isBlocked: () => interactionLocked.current || closing.current || !!current.current.paper });
+    const generalAutomationApi=useMemo<DesktopAPI>(()=>({...api,askGeneralAI:async request=>{
+        if(!api.runAgent)return api.askGeneralAI(request);
+        const owner={kind:'general' as const,id:request.conversationId};
+        const saved=await api.loadGeneralChat(),turns=api.loadAgentChatTurns?await api.loadAgentChatTurns(owner):[];
+        let recent=projectAgentChatMessages(saved.messages,turns,owner).filter(m=>m.id!==request.userMessageId).slice(-20).map(m=>({role:m.role,content:m.content}));
+        while(recent.reduce((sum,m)=>sum+m.content.length,0)>60000)recent=recent.slice(1);
+        try{const task=await api.runAgent({...buildScopedAgentInput({owner,question:request.question,choice:generalTaskScopes.current.get(request.requestId)??generalContextCurrent.current,binding:{requestId:request.requestId,userMessageId:request.userMessageId,assistantMessageId:request.assistantMessageId}}),history:recent});
+        return{requestId:request.requestId,conversationId:request.conversationId,content:agentChatContent(task),agentTaskId:task.id,agentStatus:task.status};}
+        finally{generalTaskScopes.current.delete(request.requestId)}
+    }}),[]);
+    const generalChat = useGeneralChat(generalAutomationApi, { hasApiKey: settings.hasApiKey, onSettings: () => setSettingsOpen(true), onNotice: setNotice, onRequestStart:request=>{generalTaskScopes.current.set(request.requestId,generalContextCurrent.current)},onRequestFinished:id=>{generalTaskScopes.current.delete(id)}, isBlocked: () => interactionLocked.current || closing.current || !!current.current.paper });
+    generalOwnerCurrent.current=generalChat.state?.conversationId??'';
+    const generalTurns=useAgentChatTurns(api,generalChat.state?{kind:'general',id:generalChat.state.conversationId}:null);
+    const paperTurns=useAgentChatTurns(api,paper&&!paper.isDemo&&stateReady?{kind:'paper',id:paper.id}:null);
+    const paperTurnsCurrent=useRef(paperTurns.turns);paperTurnsCurrent.current=paperTurns.turns;
+    useEffect(()=>{++turnActionSequence.current;setTurnActionBusy('');setAgentResult(null);setTaskHistoryOwner(null)},[paper?.id]);
     const requests = useAIRequestHistory(api, paper && !paper.isDemo && stateReady ? { scope: 'paper', paperId: paper.id } : null);
     useEffect(() => { if (stateReady && !requestId) void requests.refresh(); }, [stateReady, requestId, paperState.messages.length, requests.refresh]);
     const current = useRef<{
@@ -163,6 +253,25 @@ export default function App() {
     const activeRequest = useRef<string | null>(null);
     const closing = useRef(false);
     const readerRef = useRef<HTMLDivElement>(null);
+    async function refreshAutomationLibrary(){
+        const sequence=++libraryReloadSequence.current,version=metadataVersion.current;
+        try{const [items,meta]=await Promise.all([api.listPapers(),api.loadLibraryMetadata()]);if(sequence!==libraryReloadSequence.current)return;setPapers([demoPaper,...items.filter(item=>!item.isDemo)]);if(version===metadataVersion.current){metadataCurrent.current=meta;setMetadata(meta);setMetadataReady(true);}setLibraryRevision(v=>v+1);}
+        catch(error){if(sequence===libraryReloadSequence.current)setNotice(errorText(error));}
+    }
+    useEffect(()=>{
+        if(!api.onAutomationRenderJob)return;
+        return installAutomationRenderer(api,id=>automationHandlers.current.prepare(id),job=>automationHandlers.current.append(job),job=>automationHandlers.current.region(job));
+    },[]);
+    useEffect(()=>{const open=(event:Event)=>{const id=(event as CustomEvent<{paperId:string}>).detail?.paperId;if(typeof id!=='string')return;const sequence=++importedOpenSequence.current,intent=navigationIntent.current;void api.listPapers().then(items=>{if(sequence!==importedOpenSequence.current||intent!==navigationIntent.current)return;const target=items.find(p=>p.id===id);if(target)void latestOpenPaper.current(target)}).catch(e=>{if(sequence===importedOpenSequence.current)setNotice(errorText(e))})};window.addEventListener('paper-reader:open-imported-paper',open);return()=>window.removeEventListener('paper-reader:open-imported-paper',open)},[]);
+    useEffect(()=>{
+        const stopLibrary=api.onLibraryChanged?.(()=>{void refreshAutomationLibrary()});
+        const stopTasks=api.onAgentTask?.((task:AgentTask)=>{
+            if(task.input.clientRequestId&&task.input.clientRequestId===activeRequest.current)currentAgentTask.current={requestId:task.input.clientRequestId,taskId:task.id,owner:task.input.owner};
+            if(task.input.clientRequestId===activeRequest.current&&task.status==='running'){const step=task.steps.at(-1);setRequestStatus(step?.status==='running'?step.tool.replaceAll('_',' ')+'…':'Working on your request…');}
+            if(['succeeded','partial'].includes(task.status)&&current.current.paper&&task.receipts.some(r=>r.kind==='summary'&&r.paperId===current.current.paper!.id))void summary.open(current.current.paper.id);
+        });
+        return()=>{stopLibrary?.();stopTasks?.()};
+    },[]);
     const [readerWidth, setReaderWidth] = useState(620);
     const pdfWidth = useRef(readerWidth * zoom / 100); pdfWidth.current = readerWidth * zoom / 100;
     const readerSize = useRef({ width: 0, height: 0 });
@@ -171,12 +280,15 @@ export default function App() {
     if (!focusPosition.current) focusPosition.current = new FocusPositionRestore(applyFocusPosition);
     const historyPosition = useRef<RenderPositionRestore<ReadingLocation & { fullscreen: boolean }> | null>(null);
     if (!historyPosition.current) historyPosition.current = new RenderPositionRestore(applyHistoryPosition);
-    const conversationMessages = useMemo(() => paper?.isDemo ? [...demoInitial.messages, ...paperState.messages] : paperState.messages, [paper?.isDemo, paperState.messages]);
-    useEffect(() => { if (followAnswer.current && !conversationSearchActive.current && chatScroll.current) chatScroll.current.scrollTop = chatScroll.current.scrollHeight; }, [preview, paperState.messages, rightView, rightOpen, requestStatus]);
+    const conversationMessages = useMemo(() => paper?.isDemo ? [...demoInitial.messages, ...paperState.messages] : paper?projectAgentChatDisplay(paperState.messages,paperTurns.turns,paperTurns.previews,{kind:'paper',id:paper.id}):paperState.messages, [paper?.id,paper?.isDemo,paperState.messages,paperTurns.turns,paperTurns.previews]);
+    const paperTurnByUser=useMemo(()=>new Map(paperTurns.turns.map(turn=>[turn.userMessageId,turn])),[paperTurns.turns]);
+    const paperTurnByAssistant=useMemo(()=>new Map(paperTurns.turns.map(turn=>[turn.assistantMessageId,turn])),[paperTurns.turns]);
+    const paperAssistantIds=useMemo(()=>new Set(conversationMessages.filter(message=>message.role==='assistant').map(message=>message.id)),[conversationMessages]);
+    useEffect(() => { if (followAnswer.current && !conversationSearchActive.current && chatScroll.current) chatScroll.current.scrollTop = chatScroll.current.scrollHeight; }, [preview, conversationMessages, rightView, rightOpen, requestStatus]);
     useEffect(() => { if (summary.value && summary.value.paperId === paper?.id) setPageCount(summary.value.pageCount); }, [summary.value, paper?.id]);
     useEffect(() => { let alive = true; Promise.all([api.listPapers(), api.getSettings()]).then(([items, config]) => { if (!alive)
         return; setPapers([demoPaper, ...items.filter(item => !item.isDemo)]); setSettings(config); setModel(config.model); }).catch(error => alive && setNotice(errorText(error))); return () => { alive = false; }; }, []);
-    useEffect(() => { let alive = true; api.loadLibraryMetadata().then(value => { if (!alive) return; metadataCurrent.current = value; setMetadata(value); setMetadataReady(true); }).catch(error => { if (alive) setNotice(`Paper information is unavailable. Reading remains available: ${errorText(error)}`); }); return () => { alive = false; }; }, []);
+    useEffect(() => { let alive = true;const sequence=++libraryReloadSequence.current,version=metadataVersion.current; api.loadLibraryMetadata().then(value => { if (!alive||sequence!==libraryReloadSequence.current||version!==metadataVersion.current) return; metadataCurrent.current = value; setMetadata(value); setMetadataReady(true); }).catch(error => { if (alive) setNotice(`Paper information is unavailable. Reading remains available: ${errorText(error)}`); }); return () => { alive = false; }; }, []);
     useEffect(() => { const active = current.current.paper; if (active) { const updated = applyPaperMetadata(active, metadata); current.current.paper = updated; setPaper(updated); } }, [metadata]);
     useEffect(() => { setSelectionMenu(null); }, [paper?.id, paperState.lastPage, readerView, zoom, drawing, interactionMode]);
     useEffect(() => {
@@ -187,12 +299,12 @@ export default function App() {
     }, [selectionMenu]);
     useEffect(() => {
         const element = readerRef.current; if (!element) return;
-        const observer = new ResizeObserver(entries => {
-            const { width, height } = entries[0].contentRect, previous = readerSize.current;
+        const observer = new ResizeObserver(() => {
+            const { width, height, renderWidth } = stableReaderSize(element, getComputedStyle(element)), previous = readerSize.current;
             if (width !== previous.width || height !== previous.height) {
                 readerSize.current = { width, height }; focusPosition.current!.layout(width !== previous.width); historyPosition.current!.layout(width !== previous.width);
             }
-            setReaderWidth(Math.max(300, width - 64));
+            setReaderWidth(renderWidth);
         });
         observer.observe(element); return () => observer.disconnect();
     }, [paper, readerView, rightOpen, focusMode]);
@@ -200,7 +312,7 @@ export default function App() {
     useEffect(() => () => cancelPositionRestores(), []);
     function cancelPositionRestores() { focusPosition.current!.cancel(); historyPosition.current!.cancel(); }
     function matchingReaderRaster(element: HTMLElement): boolean {
-        const source = element.querySelector<HTMLCanvasElement>('.react-pdf__Page__canvas'), width = source?.getBoundingClientRect().width;
+        const source = element.querySelector<HTMLCanvasElement>('[data-pdf-frame-state="active"] .react-pdf__Page__canvas'), width = source?.getBoundingClientRect().width;
         return !!source && source.style.visibility !== 'hidden' && !!width && Math.abs(width - pdfWidth.current) <= 2 && Math.abs(renderedWidth.current - width) <= 2;
     }
     function applyFocusPosition(value: FocusPosition): boolean {
@@ -251,20 +363,28 @@ export default function App() {
             setSaveStatus('Save failed'); setNotice(`Your notes could not be saved: ${errorText(error)}`); });
         return task;
     }
-    async function flush() { finishEditing(); await adoptionSave.current.settle(); if (noteTimer.current) {
+    async function commitNoteEditor() { committingNote.current += 1; try { await noteCommit.current?.(); } finally { committingNote.current -= 1; } }
+    async function flush() { await commitNoteEditor(); finishEditing(); await adoptionSave.current.settle(); if (noteTimer.current) {
         clearTimeout(noteTimer.current);
         noteTimer.current = null;
     } const value = current.current;
-        await Promise.all([value.paper && value.loaded ? enqueueSave(value.paper.id, value.state) : writeQueue.current, marks.flush(), pdfInk.flush(), canvas.flush(), generalChat.flush()]); }
+        const results = await Promise.allSettled([value.paper && value.loaded ? enqueueSave(value.paper.id, value.state) : writeQueue.current, marks.flush(), pdfInk.flush(), finishAndFlushNoteWorkspaces([canvas, notebook]), generalChat.flush()]);
+        const failure = results.find(result => result.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason; }
     async function openPaper(next: Paper | null, target?: ReadingLocation, travelling = false): Promise<boolean> {
-        if (exportActive.current || importing.current || focusBusy.current) return false;
+        const intendedNavigation=++navigationIntent.current;
+        if (noteAppendActive.current||preparingRequest.current || exportActive.current || importing.current || focusBusy.current || notebook.busy) return false;
+        try{await voiceController.current?.finishToDraft();}catch(error){setNotice(errorText(error));return false;}
+        while(noteAppendActive.current)await noteAppendCompletion.current;
+        if(intendedNavigation!==navigationIntent.current||preparingRequest.current||exportActive.current||importing.current||focusBusy.current||notebookCurrent.current.busy)return false;
+        try { finishEditing(); } catch (error) { setNotice(`Finish editing before changing papers: ${errorText(error)}`); return false; }
         rememberLocation();
         let preloaded: [PromiseSettledResult<PaperState>, PromiseSettledResult<Uint8Array | null>] | null = null;
         const token = ++loadToken.current;
         interactionLocked.current = true; setTransitioning(true);
         setSelectionMenu(null); setNoteReview(null); setReuseReview(null);
         const requestWasCancelled = Boolean(activeRequest.current);
-        const cancellation = Promise.all([requestWasCancelled ? cancelRequest() : Promise.resolve(), summary.cancel(), pdfSearch.cancel(), generalChat.prepareToLeave()]).then(() => undefined);
+        const cancellation = Promise.all([requestWasCancelled ? cancelRequest(true) : Promise.resolve(), summary.cancel(), pdfSearch.cancel(), generalChat.prepareToLeave()]).then(() => undefined);
         try {
             if (!await continueLatestTransition(token, () => loadToken.current, cancellation)) return false;
             await flush();
@@ -299,7 +419,8 @@ export default function App() {
         }
         if (token !== loadToken.current) return false;
         next = next ? applyPaperMetadata(next, metadataCurrent.current) : null;
-        if (current.current.paper) paperDrafts.current.set(current.current.paper.id, draftCurrent.current);
+        if (current.current.paper) {paperDrafts.current.set(current.current.paper.id, draftCurrent.current);paperImageDrafts.current.set(current.current.paper.id,chatImagesCurrent.current);paperNotesDrafts.current.set(current.current.paper.id,notesSourcesCurrent.current);}
+        setChatImages(next?paperImageDrafts.current.get(next.id)||[]:[]);setNotesSources(next?paperNotesDrafts.current.get(next.id)||structuredClone(DEFAULT_CHAT_NOTES_SELECTION):structuredClone(DEFAULT_CHAT_NOTES_SELECTION));setSentImages({});
         cancelPositionRestores();
         current.current = { paper: next, state: emptyState(), loaded: false };
         interactionLocked.current = false; setTransitioning(false);
@@ -326,6 +447,7 @@ export default function App() {
         void summary.open(next?.isDemo ? null : next?.id ?? null);
         void pdfInk.open(next?.isDemo ? null : next?.id ?? null);
         void canvas.open(next?.isDemo ? null : next?.id ?? null);
+        void notebook.open(next?.isDemo ? null : next?.id ?? null).catch(() => undefined);
         if (!next) {
             setLoading(false);
             historyPosition.current!.cancel();
@@ -360,9 +482,14 @@ export default function App() {
             }
             if (errors.length) setNotice(errors.join(' '));
             if (!errors.length) {
+                if (!next.isDemo && !travelling && pdfResult.status === 'fulfilled' && pdfResult.value) {
+                    await checkHistoryPdf(pdfResult.value, 1, data => pdfjs.getDocument({ data }));
+                    if (token !== loadToken.current || current.current.paper?.id !== next.id) return false;
+                }
                 if (target) { viewPosition.current = { view: target.view, zoom: target.zoom }; setReaderView(target.view); setZoom(target.zoom); queueHistoryPosition(target); }
                 else { viewPosition.current = { view: readerView, zoom: 100 }; historyPosition.current!.cancel(); }
                 if (!travelling) visitLocation(locationSnapshot());
+                if (!next.isDemo) void activity.record(next.id);
                 return true;
             }
             return false;
@@ -378,7 +505,7 @@ export default function App() {
         return false;
     }
     async function importPaper() {
-        if (importing.current || exportActive.current || interactionLocked.current || focusBusy.current || document.querySelector('[role="dialog"]')) return;
+        if (importing.current || exportActive.current || interactionLocked.current || focusBusy.current || notebook.busy || canvas.exporting || document.querySelector('[role="dialog"]')) return;
         importing.current = true; setImportBusy(true);
         try {
         const imported = await api.importPaper();
@@ -392,7 +519,7 @@ export default function App() {
         setNotice(errorText(error));
     } finally { importing.current = false; setImportBusy(false); } }
     function changeNote(note: string) {
-        if (interactionLocked.current || !current.current.loaded || !current.current.paper) return;
+        if ((interactionLocked.current && !committingNote.current) || !current.current.loaded || !current.current.paper) return;
         updateState({ ...current.current.state, note }); setSaveStatus('Saving…');
         if (noteTimer.current) clearTimeout(noteTimer.current);
         const saveLatest = deferredPaperStateSave(current.current.paper.id, () => current.current, enqueueSave);
@@ -411,6 +538,7 @@ export default function App() {
         if (proposal) setNoteReview({ paperId: message.paperId, messageId: message.id, originalNote: active.state.note, proposal });
     }
     async function applyNoteSuggestion(proposal: string, mode: 'append' | 'replace') {
+        await commitNoteEditor();
         const review = noteReview, active = current.current;
         if (!review || interactionLocked.current || !active.loaded) throw new Error('Open the paper and review the suggestion again.');
         assertReviewPaper(review.paperId, active.paper?.id ?? null);
@@ -444,17 +572,25 @@ export default function App() {
         catch (error) { setNotice(errorText(error)); }
     }
     function changeMarks(value: ReadingMarks) { if (!interactionLocked.current) marks.update(value); }
-    function finishEditing() { marks.finishInk(); marks.finishEraseInk(); pdfInk.finish(); canvas.finish(); }
+    function finishEditing() { marks.finishInk(); marks.finishEraseInk(); pdfInk.finish(); canvas.finish(); notebook.finish(); }
     function changeReaderView(value: 'reader' | 'summary') {
-        if (interactionLocked.current || exportActive.current || historyTravel.current || focusBusy.current) return;
+        if (interactionLocked.current || exportActive.current || historyTravel.current || focusBusy.current || notebook.busy) return;
         if (viewPosition.current.view === value) return;
         if (focusCurrent.current && value === 'summary') { void toggleFocus().then(changed => { if (changed) changeReaderView(value); }); return; }
         rememberLocation(); finishEditing(); cancelPositionRestores(); viewPosition.current.view = value; setReaderView(value);
         if (current.current.paper && current.current.loaded) visitLocation({ ...locationSnapshot(), view: value, scrollTop: 0, scrollLeft: 0 });
         if (readerRef.current) { readerRef.current.scrollTop = 0; readerRef.current.scrollLeft = 0; }
     }
-    function changeRightView(value: 'chat' | 'note') { finishEditing(); setRightView(value); }
-    function changeNoteTab(value: NoteTab) { finishEditing(); setNoteTab(value); }
+    async function switchNoteView(select: () => void): Promise<boolean> {
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || closing.current) return false;
+        const id = current.current.paper?.id, token = loadToken.current;
+        interactionLocked.current = true; setTransitioning(true);
+        try { return await switchNoteWorkspace({ flush, isCurrent: () => token === loadToken.current && current.current.paper?.id === id && !closing.current, select }); }
+        catch (error) { if (token === loadToken.current) setNotice(`Save before changing notes failed. Your current tab and edits were preserved: ${errorText(error)}`); return false; }
+        finally { if (token === loadToken.current) { interactionLocked.current = false; setTransitioning(false); } }
+    }
+    function changeRightView(value: 'chat' | 'note') { if (value !== rightView) void switchNoteView(() => setRightView(value)); }
+    function changeNoteTab(value: NoteTab) { if (value !== noteTab) void switchNoteView(() => setNoteTab(value)); }
     function closeNavigation() { setNavigationOpen(false); navigationButton.current?.focus(); }
     function navigateConversation(messageId: string) {
         setSelectedMessage(messageId); followAnswer.current = false;
@@ -485,7 +621,7 @@ export default function App() {
         catch (error) { setReuseError(errorText(error)); }
     }
     async function goToPage(page: number) {
-        if (interactionLocked.current || exportActive.current || historyTravel.current || focusBusy.current || !current.current.loaded || !current.current.paper) return;
+        if (interactionLocked.current || exportActive.current || historyTravel.current || focusBusy.current || notebook.busy || !current.current.loaded || !current.current.paper) return;
         const id = current.current.paper.id, token = loadToken.current, previousPage = current.current.state.lastPage;
         const next = Math.max(1, Math.min(pageCount, page));
         const valid = () => token === loadToken.current && current.current.paper?.id === id && current.current.loaded;
@@ -511,7 +647,7 @@ export default function App() {
         const quote = selected.toString().trim();
         setSelection(quote); selectedRects.current = null;
         if (quote.length > 30000) { setNotice('Selected passages support up to 30,000 characters for AI. Choose a shorter passage before sending.'); return; }
-        const page = readerRef.current.querySelector('.react-pdf__Page');
+        const page = readerRef.current.querySelector('[data-pdf-frame-state="active"] .react-pdf__Page');
         if (!paper || paper.isDemo || !page || !quote || !selected.rangeCount || !page.contains(selected.anchorNode) || !page.contains(selected.focusNode)) return;
         const bounds = selected.getRangeAt(0).getBoundingClientRect();
         if (bounds.width > 0 && bounds.height > 0) setSelectionMenu({ paperId: paper.id, page: paperState.lastPage, text: quote, rect: { left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom } });
@@ -530,7 +666,12 @@ export default function App() {
     function generateSummary() {
         if (interactionLocked.current || !paper || paper.isDemo || !summary.ready) return;
         if (!settings.hasApiKey) { setNotice('Connect your DeepSeek API key in Settings to generate a full-paper summary.'); setSettingsOpen(true); return; }
-        void summary.generate(paper.id);
+        void summary.generate(paper.id, summary.language);
+    }
+    function resumeSummary() {
+        if (interactionLocked.current || !paper || paper.isDemo || !summary.ready) return;
+        if (!settings.hasApiKey) { setNotice('Connect your DeepSeek API key in Settings to continue the summary.'); setSettingsOpen(true); return; }
+        void summary.resume(paper.id);
     }
     function selectionAction(action: SelectionAction, selected: SelectionSnapshot) {
         if (interactionLocked.current || !current.current.loaded || !isCurrentSelection(selected, current.current.paper?.id ?? null, current.current.state.lastPage)) return;
@@ -539,55 +680,57 @@ export default function App() {
         const prompts = { explain: 'Explain the selected passage in simple terms.', translate: 'Translate the selected passage into Chinese.', summarize: 'Summarize the selected passage concisely.' };
         void sendQuestion('ask', { selected, question: prompts[action] });
     }
-    async function sendQuestion(action: AIRequest['action'] = 'ask', quick?: { selected: SelectionSnapshot; question: string }) {
-        const original = current.current.paper;
-        const prompt = quick?.question ?? question;
-        if (interactionLocked.current || !original || !current.current.loaded || (action !== 'organize-notes' && !prompt.trim()) || activeRequest.current) return;
-        if (quick && !isCurrentSelection(quick.selected, original.id, current.current.state.lastPage)) return;
-        if (current.current.state.messages.length + 2 > 1000) { setNotice('Conversation message limit reached. Existing messages and your draft are preserved.'); return; }
-        if (action !== 'organize-notes' && prompt.trim().length > 20000) { setNotice('Keep questions within 20,000 characters. Your draft is preserved.'); return; }
-        if (!settings.hasApiKey) { setNotice('Connect your DeepSeek API key in Settings to ask a question.'); setSettingsOpen(true); return; }
-        const id = crypto.randomUUID(), userMessageId = crypto.randomUUID(), assistantMessageId = crypto.randomUUID();
-        let snapshot: AIRequest;
-        try { snapshot = createQuestionSnapshot({ requestId: id, paper: original, state: current.current.state, question: prompt, mode: quick ? 'page' : contextMode, pageText, selection: quick?.selected.text ?? selection, action }); }
-        catch (error) { setNotice(errorText(error)); return; }
-        const wholePaper = snapshot.context.mode === 'paper' || snapshot.context.mode === 'paper-notes';
-        if (wholePaper && original.isDemo) { setNotice('Open an imported PDF to use whole-paper context.'); return; }
-        // The identity becomes active before persistence and extraction can yield.
-        activeRequest.current = id; setRequestId(id); setPreview(null); followAnswer.current = true; conversationSearchActive.current = false; setSelectedMessage(null); setConversationSession(value => value + 1); setRequestStatus(wholePaper ? 'Opening the full paper…' : 'Preparing your selected context…'); setNotice('');
-        if (quick) setContextMode('page');
-        setSelectionMenu(null);
-        setRightView('chat'); setRightOpen(true);
-        const isCurrent = () => activeRequest.current === id && current.current.paper?.id === original.id && current.current.loaded;
-        const unsubscribe = api.onAIProgress(event => {
-            if (!isCurrent()) return;
-            setPreview(previous => updateStreamPreview(previous, event, { requestId: activeRequest.current, paperId: current.current.paper?.id ?? null, loaded: current.current.loaded }));
-            if (event.requestId === id && event.paperId === original.id) setRequestStatus(event.type === 'reset' && event.attempt === 2 ? 'Completing a longer answer…' : 'Writing your answer…');
-        });
-        progressSubscription.current = unsubscribe;
-        try {
-            if (action === 'organize-notes') await flush();
-            if (!isCurrent()) return;
-            const message: ChatMessage = { id: userMessageId, paperId: original.id, role: 'user', content: action === 'organize-notes' ? ORGANIZE_NOTES_DISPLAY_QUESTION : snapshot.question, createdAt: new Date().toISOString() };
-            const next = { ...current.current.state, messages: [...current.current.state.messages, message] };
-            updateState(next); await enqueueSave(original.id, next);
-            if (!isCurrent()) return;
-            if (action === 'ask' && !quick && draftCurrent.current.trim() === snapshot.question) { draftCurrent.current = ''; setQuestion(''); }
-            if (wholePaper) {
-                const pages = await extraction.current!.read(original.id, isCurrent, (page, total) => { if (isCurrent()) setRequestStatus(`Reading page ${page} of ${total}…`); });
-                if (!isCurrent()) return;
-                snapshot = withExtractedPages(snapshot, pages);
+    async function sendQuestion(action: AIRequest['action'] = 'ask', quick?: { selected: SelectionSnapshot; question: string }, explicitPrompt?:string,onCommitted?:()=>void) {
+        const original=current.current.paper,prompt=explicitPrompt??quick?.question??draftCurrent.current;
+        if(interactionLocked.current||preparingRequest.current||!original||!current.current.loaded||(action!=='organize-notes'&&!prompt.trim())||activeRequest.current)return;
+        if(current.current.state.messages.length+2>1000){setNotice('Conversation message limit reached. Existing messages and your draft are preserved.');return;}
+        if(action!=='organize-notes'&&prompt.trim().length>20000){setNotice('Keep questions within 20,000 characters. Your draft is preserved.');return;}
+        if(!settings.hasApiKey){setNotice('Connect your DeepSeek API key in Settings to ask a question.');setSettingsOpen(true);return;}
+        const id=crypto.randomUUID(),userMessageId=crypto.randomUUID(),assistantMessageId=crypto.randomUUID(),token=loadToken.current;
+        activeRequest.current=id;preparingRequest.current=id;interactionLocked.current=true;setTransitioning(true);setRequestId(id);setPreview(null);setNotice('');setRequestStatus(action==='organize-notes'?'Preparing your text note…':'Preparing selected sources and images…');
+        followAnswer.current=true;conversationSearchActive.current=false;setSelectedMessage(null);setConversationSession(v=>v+1);
+        const isCurrent=()=>activeRequest.current===id&&current.current.paper?.id===original.id&&current.current.loaded&&token===loadToken.current&&!closing.current;
+        const releasePreparation=()=>{if(preparingRequest.current===id){preparingRequest.current=null;if(token===loadToken.current){interactionLocked.current=false;setTransitioning(false);}}};
+        const unsubscribe=api.onAIProgress(event=>{if(!isCurrent())return;setPreview(previous=>updateStreamPreview(previous,event,{requestId:activeRequest.current,paperId:current.current.paper?.id??null,loaded:current.current.loaded}));if(event.requestId===id&&event.paperId===original.id)setRequestStatus(event.type==='reset'&&event.attempt===2?'Completing a longer answer…':action==='organize-notes'?'Organizing and checking your text note…':'Writing your answer…');});progressSubscription.current=unsubscribe;
+        try{
+            await flush();if(!isCurrent())return;
+            if(quick&&!isCurrentSelection(quick.selected,original.id,current.current.state.lastPage))return;
+            const mode=quick?'page':contextMode,selectionSnapshot=structuredClone(notesSourcesCurrent.current),attachments=action==='organize-notes'?[]:structuredClone(chatImagesCurrent.current);
+            let notesSnapshot:ChatNotesSnapshot|undefined;
+            if(action==='organize-notes'||mode==='notes'||mode==='paper-notes'){
+                if(action!=='organize-notes'&&!original.isDemo){
+                    const emptyBook={version:1 as const,surface:'infinite' as const,paperId:original.id,activePageId:'',pages:[]},emptyMap={version:1 as const,paperId:original.id,nodes:[]};
+                    const [savedMarks,savedMap,savedBook]=await Promise.all([selectionSnapshot.highlights?api.loadMarks(original.id):Promise.resolve({highlights:[],strokes:[]}),selectionSnapshot.mindMap?api.loadMindMap(original.id):Promise.resolve(emptyMap),selectionSnapshot.canvas?api.loadCanvasNotebook(original.id):Promise.resolve(emptyBook)]);
+                    if(!isCurrent())return;
+                    notesSnapshot=await buildChatNotesSnapshot({paperId:original.id,note:current.current.state.note,marks:savedMarks,mindMap:savedMap,notebook:savedBook,selection:selectionSnapshot,attachments},async(page,region)=>{if(!isCurrent())throw Error('Request cancelled');const images=await rasterNotebookRegion(original.id,page,{format:'png',scope:'selection',region},api.readCanvasImage);if(!isCurrent())throw Error('Request cancelled');if(images.length!==1)throw Error('A Canvas image region could not be prepared completely');return api.saveAIImage(original.id,{bytes:images[0],origin:{kind:'canvas',pageId:page.id,pageName:page.name,region}});},isCurrent);
+                }
             }
-            if (!isCurrent()) return;
-            setRequestStatus('Thinking with your context…');
-            const result = original.isDemo ? await api.askAI(snapshot) : await api.askRecordedAI({ request: snapshot, userMessageId, assistantMessageId });
-            if (!isCurrent() || !acceptsAIResult(activeRequest.current, id, original.id, result)) return;
-            setPreview(null);
-            const latest = appendAIResponse(current.current.state, original.id, result.content, action === 'organize-notes', assistantMessageId);
-            updateState(latest); await enqueueSave(original.id, latest);
-            if (result.historyWarning) setNotice(result.historyWarning);
-        } catch (error) { if (isCurrent()) setNotice(errorText(error)); }
-        finally { unsubscribe(); if (progressSubscription.current === unsubscribe) progressSubscription.current = null; if (activeRequest.current === id) { activeRequest.current = null; setRequestId(null); setRequestStatus(''); setPreview(null); } }
+            if(!isCurrent())return;
+            const persistedMessages=original.isDemo?current.current.state.messages:projectAgentChatMessages(current.current.state.messages,paperTurnsCurrent.current,{kind:'paper',id:original.id});
+            const snapshot:AIRequest=mode==='library'&&action!=='organize-notes'?{requestId:id,paperId:original.id,question:prompt.trim(),action:'ask',history:persistedMessages.filter(message=>!message.isDemo).slice(-12).map(({role,content})=>({role,content})),...(attachments.length?{attachments}:{}),context:{paperTitle:original.title,page:current.current.state.lastPage,pageText:''}}:createQuestionSnapshot({requestId:id,paper:original,state:{...current.current.state,messages:persistedMessages},question:prompt,mode:mode==='library'?'notes':mode,pageText,selection:quick?.selected.text??selection,action,notesSnapshot,attachments});
+            const wholePaper=snapshot.context.mode==='paper'||snapshot.context.mode==='paper-notes';
+            if(wholePaper&&original.isDemo)throw Error('Open an imported PDF to use whole-paper context.');
+            releasePreparation();if(quick)setContextMode('page');setSelectionMenu(null);setRightView('chat');setRightOpen(true);
+            const message:ChatMessage={id:userMessageId,paperId:original.id,role:'user',content:action==='organize-notes'?ORGANIZE_NOTES_DISPLAY_QUESTION:snapshot.question,createdAt:new Date().toISOString()};
+            const images=[...new Map([...(snapshot.attachments||[]),...(snapshot.context.notesSnapshot?.images||[])].map(i=>[i.imageId,i])).values()];if(images.length)setSentImages(previous=>({...previous,[userMessageId]:images}));
+            const next={...current.current.state,messages:[...persistedMessages,message]};updateState(next);await enqueueSave(original.id,next);if(!isCurrent())return;
+            if(action==='ask'&&!quick&&draftCurrent.current.trim()===snapshot.question){draftCurrent.current='';setQuestion('');}
+            onCommitted?.();
+            if(wholePaper){const pages=await extraction.current!.read(original.id,isCurrent,(page,total)=>{if(isCurrent())setRequestStatus(`Reading page ${page} of ${total}…`);});if(!isCurrent())return;snapshot.context.pages=pages;}
+            setRequestStatus(action==='organize-notes'?'Organizing and checking your text note…':'Thinking with your selected sources…');
+            let result:import('../../shared/types').AIResult;
+            if(action==='ask'&&!original.isDemo&&api.runAgent){
+                const task=await api.runAgent(buildScopedAgentInput({owner:{kind:'paper',id:original.id},question:snapshot.question,choice:mode,paperId:original.id,page:snapshot.context.page,snapshot,binding:{requestId:id,userMessageId,assistantMessageId}}));
+                if(!task.answer.trim())return;
+                result={requestId:id,paperId:original.id,content:agentChatContent(task)};
+            }else result=original.isDemo?await api.askAI(snapshot):await api.askRecordedAI({request:snapshot,userMessageId,assistantMessageId});
+            await noteAppendCompletion.current;
+            if(!isCurrent()||!acceptsAIResult(activeRequest.current,id,original.id,result))return;
+            setPreview(null);const latest=appendAIResponse(current.current.state,original.id,result.content,action==='organize-notes',assistantMessageId);updateState(latest);await enqueueSave(original.id,latest);
+            if(action==='ask'&&attachments.length){const sent=new Set(attachments.map(i=>i.imageId));setChatImages(previous=>previous.filter(i=>!sent.has(i.imageId)));}
+            if(result.historyWarning)setNotice(result.historyWarning);
+        }catch(error){if(isCurrent())setNotice(errorText(error));}
+        finally{releasePreparation();unsubscribe();if(progressSubscription.current===unsubscribe)progressSubscription.current=null;if(activeRequest.current===id){activeRequest.current=null;setRequestId(null);setRequestStatus('');setPreview(null);}}
     }
     async function retryOriginalRequest(record: AIRequestRecord) {
         const original = current.current.paper;
@@ -612,6 +755,7 @@ export default function App() {
             const next = { ...current.current.state, messages: [...current.current.state.messages, newUser] };
             updateState(next); await enqueueSave(original.id, next); if (!isCurrent()) return;
             const result = await api.retryAIRequest({ owner: { scope: 'paper', paperId: original.id }, originalRequestId: record.requestId, requestId: id, userMessageId, assistantMessageId });
+            await noteAppendCompletion.current;
             if (!isCurrent() || !('paperId' in result) || !acceptsAIResult(id, id, original.id, result)) return;
             setPreview(null);
             const latest = appendAIResponse(current.current.state, original.id, result.content, record.context.action === 'organize-notes', assistantMessageId);
@@ -620,46 +764,70 @@ export default function App() {
         } catch (error) { if (isCurrent()) setNotice(errorText(error)); }
         finally { unsubscribe(); if (progressSubscription.current === unsubscribe) progressSubscription.current = null; if (activeRequest.current === id) { activeRequest.current = null; setRequestId(null); setRequestStatus(''); setPreview(null); } }
     }
-    async function cancelRequest() {
+    async function cancelRequest(keepAgent=false) {
         const id = activeRequest.current;
         if (!id) return;
         activeRequest.current = null; setRequestId(null); setRequestStatus(''); setPreview(null);
         progressSubscription.current?.(); progressSubscription.current = null;
-        const results = await Promise.allSettled([api.cancelAI(id), extraction.current!.cancel()]);
+        const results = await Promise.allSettled([api.cancelAI(id,keepAgent?{keepAgent:true}:undefined), extraction.current!.cancel()]);
         const failed = results.find(result => result.status === 'rejected');
         setNotice(failed?.status === 'rejected' ? errorText(failed.reason) : 'Request cancelled.');
     }
     async function exportNotes() {
         const original = current.current.paper;
-        if (interactionLocked.current || exportActive.current || !original || original.isDemo || !current.current.loaded || !marks.ready || !pdfInk.ready || !summary.ready || activeRequest.current || summary.busy) return;
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || !original || original.isDemo || !current.current.loaded || !marks.ready || !pdfInk.ready || !summary.ready || activeRequest.current || summary.busy) return;
         exportActive.current = true; interactionLocked.current = true; setExporting(true); setTransitioning(true);
         try {
             const result = await flushBeforeExport([flush], () => api.exportReadingNotes(original.id));
-            if (!result.canceled) setNotice(`Reading notes exported${result.fileName ? ` to ${result.fileName}` : ''}. Drawings are kept in the app.`);
+            if (!result.canceled) setNotice(`Reading notes exported${result.fileName ? ` to ${result.fileName}` : ''}. Drawings are kept in the app.`, 'success');
         } catch (error) { setNotice(`Export stopped to protect your notes: ${errorText(error)}`); }
         finally { exportActive.current = false; interactionLocked.current = false; setExporting(false); setTransitioning(false); }
     }
     async function exportPdf() {
         const original = current.current.paper;
-        if (interactionLocked.current || exportActive.current || !original || original.isDemo || !current.current.loaded || !marks.ready || !pdfInk.ready || activeRequest.current || summary.busy) return;
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || !original || original.isDemo || !current.current.loaded || !marks.ready || !pdfInk.ready || activeRequest.current || summary.busy) return;
         exportActive.current = true; interactionLocked.current = true; setExporting(true); setTransitioning(true);
         try {
             const result = await flushBeforeExport([flush], () => api.exportAnnotatedPdf(original.id));
-            if (!result.canceled) setNotice(`Annotated PDF exported${result.fileName ? ` to ${result.fileName}` : ''}. Your original PDF is unchanged.`);
+            if (!result.canceled) setNotice(`Annotated PDF exported${result.fileName ? ` to ${result.fileName}` : ''}. Your original PDF is unchanged.`, 'success');
         } catch (error) { setNotice(`PDF export stopped: ${errorText(error)}`); }
         finally { exportActive.current = false; interactionLocked.current = false; setExporting(false); setTransitioning(false); }
     }
-    async function exportCanvas() {
-        if (interactionLocked.current || exportActive.current || !current.current.loaded || !canvasBoardReady || !paper || paper.isDemo) return;
+    async function exportCanvas(options?: CanvasExportOptions) {
+        const original = current.current.paper, page = notebook.activePage, token = loadToken.current;
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || !current.current.loaded || !canvasBoardReady || !original || original.isDemo || !page) return;
         exportActive.current = true; interactionLocked.current = true; setExporting(true); setTransitioning(true);
         try {
-            await flush(); const png = await canvas.exportPng();
-            const result = canvas.boardMode === 'mind-map' ? await api.exportMindMapPng(paper.id, png) : await api.exportCanvasPng(paper.id, png);
-            if (!result.canceled) setNotice(`${canvas.boardMode === 'mind-map' ? 'Mind map' : 'Canvas'} exported${result.fileName ? ` to ${result.fileName}` : ''}.`);
-        }
-        catch (error) { setNotice(`Canvas export stopped: ${errorText(error)}`); }
-        finally { exportActive.current = false; interactionLocked.current = false; setExporting(false); setTransitioning(false); }
+            const captured = options ?? { format: 'png', scope: 'all', region: notebookContentBounds(page) };
+            const result = await exportNotebookRegion({ paperId: original.id, pageId: page.id, options: captured, resolveOptions: value => value.scope === 'all' ? { ...value, region: notebookContentBounds(notebookCurrent.current.activePage!) } : value, flush, raster: notebook.exportRegion, save: (id, pageId, range, images) => api.exportCanvasRegion(id, pageId, range, images), isCurrent: () => token === loadToken.current && current.current.paper?.id === original.id && notebookCurrent.current.activePage?.id === page.id && !closing.current });
+            if (!result.canceled) setNotice(`Canvas region exported${result.fileName ? ` to ${result.fileName}` : ''}.`, 'success');
+        } catch (error) { setNotice(`Canvas export stopped: ${errorText(error)}`); }
+        finally { exportActive.current = false; if (token === loadToken.current) { interactionLocked.current = false; setExporting(false); setTransitioning(false); } }
     }
+    async function exportMindMap() {
+        const original = current.current.paper, token = loadToken.current;
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || !current.current.loaded || !mapBoardReady || !original || original.isDemo) return;
+        exportActive.current = true; interactionLocked.current = true; setExporting(true); setTransitioning(true);
+        try {
+            const result = await exportStandaloneMap({ paperId: original.id, flush, selectMap: () => canvas.setBoardMode('mind-map'), raster: canvas.exportPng, save: (id, bytes) => api.exportMindMapPng(id, bytes), isCurrent: () => token === loadToken.current && current.current.paper?.id === original.id && !closing.current });
+            if (!result.canceled) setNotice(`Mind map exported${result.fileName ? ` to ${result.fileName}` : ''}.`, 'success');
+        } catch (error) { setNotice(`Mind map export stopped: ${errorText(error)}`); }
+        finally { exportActive.current = false; if (token === loadToken.current) { interactionLocked.current = false; setExporting(false); setTransitioning(false); } }
+    }
+    async function copySourceToCanvas(copy: () => Promise<void>, label: string) {
+        const original = current.current.paper, token = loadToken.current;
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || !original || original.isDemo || !current.current.loaded || !canvasBoardReady) return;
+        interactionLocked.current = true; setTransitioning(true);
+        try {
+            await copySavedSourceToNotebook({ flushSource: flush, copy, isCurrent: () => token === loadToken.current && current.current.paper?.id === original.id && current.current.loaded && !closing.current, showCanvas: () => { setRightOpen(true); setRightView('note'); setNoteTab('canvas'); setNotice(`${label} copied to Canvas. The original is unchanged.`, 'success'); } });
+        } catch (error) { if (token === loadToken.current) setNotice(`${label} could not be copied to Canvas. Your current tab and original were preserved: ${errorText(error)}`); }
+        finally { if (token === loadToken.current) { interactionLocked.current = false; setTransitioning(false); } }
+    }
+    function addHighlightToCanvas(id: string) {
+        if (!marks.ready || marks.current.current?.id !== current.current.paper?.id) return;
+        void copySourceToCanvas(() => notebook.importHighlight(id), 'Highlight');
+    }
+    function addMindMapToCanvas() { if (mapBoardReady && canvas.mindMap.nodes.length) void copySourceToCanvas(notebook.importMindMap, 'Mind map'); }
     function changePdfMode(mode: 'read' | 'hand' | 'capture') {
         if (interactionLocked.current || exportActive.current || !current.current.loaded) return;
         finishEditing(); setDrawing(false); setErasing(false); setInteractionMode(mode);
@@ -667,15 +835,35 @@ export default function App() {
     }
     async function addPdfCapture(capture: PdfCaptureInput) {
         const original = current.current.paper;
-        if (interactionLocked.current || exportActive.current || !original || original.isDemo || !current.current.loaded || capture.page !== current.current.state.lastPage || !canvas.ready) throw new Error('Open an editable Canvas before adding a PDF capture.');
+        if (interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || canvas.exporting || !original || original.isDemo || !current.current.loaded || capture.page !== current.current.state.lastPage || !canvasBoardReady) throw new Error('Open an editable Canvas before adding a PDF capture.');
+        const token = loadToken.current;
         interactionLocked.current = true; setTransitioning(true);
         try {
-            await canvas.captureImage(capture); await canvas.flush();
-            if (current.current.paper?.id !== original.id) return;
+            await flush();
+            if (token !== loadToken.current || current.current.paper?.id !== original.id) return;
+            await notebook.captureImage(capture); await notebook.flush();
+            if (token !== loadToken.current || current.current.paper?.id !== original.id) return;
             if (focusCurrent.current) { await api.setFullscreen(false); focusCurrent.current = false; setFocusMode(false); }
             setInteractionMode('read'); setRightOpen(true); setRightView('note'); setNoteTab('canvas');
-            setNotice(`PDF region added to Canvas · page ${capture.page}.`);
-        } finally { interactionLocked.current = false; setTransitioning(false); }
+            setNotice(`PDF region added to Canvas · source page ${capture.page}.`, 'success');
+        } finally { if (token === loadToken.current) { interactionLocked.current = false; setTransitioning(false); } }
+    }
+    async function handlePdfCapture(capture:PdfCaptureInput,action:PdfCaptureAction='canvas') {
+        if(action==='canvas')return addPdfCapture(capture);
+        const original=current.current.paper,token=loadToken.current;
+        if(!original||original.isDemo||!current.current.loaded||interactionLocked.current||capture.page!==current.current.state.lastPage)throw Error('Wait for the current PDF page before using the screenshot.');
+        const currentCapture=()=>token===loadToken.current&&current.current.paper?.id===original.id&&capture.page===current.current.state.lastPage&&!closing.current;
+        if(action==='copy'){await api.copyPdfCapture(original.id,capture);if(currentCapture())setNotice('Screenshot copied to clipboard.','success');return;}
+        if(action==='save'){
+            if(exportActive.current)throw Error('Finish the current export first.');exportActive.current=true;setExporting(true);
+            try{const result=await api.exportPdfCapture(original.id,capture);if(currentCapture()&&!result.canceled)setNotice(`Screenshot saved${result.fileName?' to '+result.fileName:''}.`,'success');}finally{exportActive.current=false;setExporting(false);}return;
+        }
+        if(chatImagesCurrent.current.length>=AI_IMAGE_LIMIT)throw Error('A question supports up to 8 image attachments. Remove one before adding another.');
+        const image=await api.saveAIImage(original.id,{bytes:capture.bytes,origin:{kind:'pdf-capture',page:capture.page,rect:capture.rect}});if(!currentCapture())return;
+        let attached=false;
+        const selected=await switchNoteView(()=>{if(!currentCapture())return;setChatImages(previous=>previous.some(i=>i.imageId===image.imageId)?previous:[...previous,image]);setRightView('chat');setRightOpen(true);setInteractionMode('read');attached=true;});
+        if(!selected||!attached)throw Error('Screenshot was not attached. Finish saving your notes, then try again.');
+        if(currentCapture()&&focusCurrent.current){await api.setFullscreen(false);focusCurrent.current=false;setFocusMode(false);}if(currentCapture()){questionInput.current?.focus();setNotice('Screenshot attached. Add your question, then send.','success');}
     }
     function rememberFocusScroll(fullscreen: boolean) {
         const element = readerRef.current, active = current.current.paper;
@@ -685,7 +873,7 @@ export default function App() {
         focusPosition.current!.begin({ ...position, fullscreen });
     }
     async function toggleFocus(): Promise<boolean> {
-        if (focusBusy.current || interactionLocked.current || exportActive.current || !current.current.paper || !current.current.loaded) return false;
+        if (focusBusy.current || interactionLocked.current || exportActive.current || notebook.busy || !current.current.paper || !current.current.loaded) return false;
         if (!focusCurrent.current && viewPosition.current.view !== 'reader') { setNotice('Switch to Reader to enter focus mode.'); return false; }
         const token = loadToken.current;
         focusBusy.current = true; interactionLocked.current = true; setTransitioning(true);
@@ -699,7 +887,7 @@ export default function App() {
         finally { focusBusy.current = false; if (token === loadToken.current) { interactionLocked.current = false; setTransitioning(false); } }
     }
     async function travelHistory(direction: HistoryDirection) {
-        if (historyTravel.current || interactionLocked.current || exportActive.current || importing.current || focusBusy.current || document.querySelector('[role="dialog"]')) return;
+        if (historyTravel.current || interactionLocked.current || exportActive.current || importing.current || focusBusy.current || notebook.busy || document.querySelector('[role="dialog"]')) return;
         const target = history.current.peek(direction);
         if (!target) return;
         rememberLocation(); historyTravel.current = true;
@@ -732,17 +920,17 @@ export default function App() {
         changePdfMode('read'); setSearchOpen(true); setSearchFocus(value => value + 1);
     }
     function runDesktopCommand(command: DesktopCommand) {
-        if (document.querySelector('[role="dialog"]') || importing.current || focusBusy.current || interactionLocked.current || exportActive.current) return;
+        if (document.querySelector('[role="dialog"]') || importing.current || focusBusy.current || interactionLocked.current || exportActive.current || notebook.busy || canvas.exporting) return;
         switch (command) {
             case 'import': void importPaper(); break;
-            case 'save': if (current.current.loaded) void flush().then(() => setNotice('All current reading edits saved locally.')).catch(error => setNotice(`Save failed: ${errorText(error)}`)); else setNotice('Saved notes are unavailable. Reload them before saving.'); break;
+            case 'save': if (current.current.loaded) void flush().then(() => setNotice('All current reading edits saved locally.', 'success')).catch(error => setNotice(`Save failed: ${errorText(error)}`)); else setNotice('Saved notes are unavailable. Reload them before saving.'); break;
             case 'export-notes': void exportNotes(); break;
             case 'export-pdf': void exportPdf(); break;
             case 'export-canvas': void exportCanvas(); break;
             case 'home': void openPaper(null); break;
             case 'reader': changeReaderView('reader'); break;
             case 'summary': changeReaderView('summary'); break;
-            case 'toggle-assistant': finishEditing(); setRightOpen(value => !value); break;
+            case 'toggle-assistant': void switchNoteView(() => setRightOpen(value => !value)); break;
             case 'toggle-focus': void toggleFocus(); break;
             case 'back': void travelHistory('back'); break;
             case 'forward': void travelHistory('forward'); break;
@@ -765,7 +953,7 @@ export default function App() {
         const editingText = active instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.isContentEditable);
         if (!document.querySelector('[role="dialog"]') && isReadingScrollKey(event, editingText)) cancelPositionRestores();
         const action: DesktopKeyAction | null = resolveDesktopKey(event, {
-            busy: interactionLocked.current || exportActive.current || importing.current || focusBusy.current || loading,
+            busy: interactionLocked.current || exportActive.current || importing.current || focusBusy.current || loading || notebook.busy || canvas.exporting,
             hasPaper: !!paper, hasRealPaper: !!paper && !paper.isDemo && stateReady,
             hasModal: !!document.querySelector('[role="dialog"]'), settingsOpen, helpOpen: !!helpOpen,
             childEscapeLayer: !!document.querySelector('[aria-label="Cancel PDF capture"]'),
@@ -793,18 +981,18 @@ export default function App() {
     }, []);
     useEffect(() => {
         const real = !!paper && !paper.isDemo && stateReady && !!bytes;
-        const state: DesktopMenuState = { hasPaper: !!paper, hasRealPaper: real, busy: transitioning || loading || exporting || importBusy || settingsOpen || !!helpOpen || !!noteReview || !!reuseReview, canBack: history.current.canBack, canForward: history.current.canForward, focusMode, rightOpen, canvasReady: canvasBoardReady, readerView,
+        const state: DesktopMenuState = { hasPaper: !!paper, hasRealPaper: real, busy: transitioning || loading || exporting || importBusy || notebook.busy || canvas.exporting || settingsOpen || !!helpOpen || !!noteReview || !!reuseReview, canBack: history.current.canBack, canForward: history.current.canForward, focusMode, rightOpen, canvasReady: canvasBoardReady, readerView,
             notesReady: stateReady, notesExportReady: real && metadataReady && marks.ready && pdfInk.ready && summary.ready && !requestId && !summary.busy,
-            pdfExportReady: real && metadataReady && marks.ready && pdfInk.ready && !requestId && !summary.busy, canvasExportReady: real && metadataReady && canvasBoardReady && !canvas.exporting };
+            pdfExportReady: real && metadataReady && marks.ready && pdfInk.ready && !requestId && !summary.busy, canvasExportReady: real && metadataReady && canvasBoardReady && !notebook.exporting };
         void api.setDesktopMenuState(state).catch(error => setNotice(`Desktop menus unavailable: ${errorText(error)}`));
-    }, [paper, bytes, stateReady, transitioning, loading, exporting, importBusy, settingsOpen, helpOpen, noteReview, reuseReview, focusMode, rightOpen, canvasBoardReady, canvas.exporting, readerView, paperState.lastPage, metadataReady, marks.ready, pdfInk.ready, summary.ready, requestId, summary.busy]);
+    }, [paper, bytes, stateReady, transitioning, loading, exporting, importBusy, settingsOpen, helpOpen, noteReview, reuseReview, focusMode, rightOpen, canvasBoardReady, notebook.busy, notebook.exporting, canvas.exporting, readerView, paperState.lastPage, metadataReady, marks.ready, pdfInk.ready, summary.ready, requestId, summary.busy]);
     async function saveSettings() { if (!model.trim())
         return; setSavingSettings(true); try {
         const value = await api.saveSettings({ model: model.trim(), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
         setSettings(value);
         setApiKey('');
         setSettingsOpen(false);
-        setNotice('DeepSeek settings saved on this device.');
+        setNotice('DeepSeek settings saved on this device.', 'success');
     }
     catch (error) {
         setNotice(errorText(error));
@@ -812,7 +1000,11 @@ export default function App() {
     finally {
         setSavingSettings(false);
     } }
-    async function closeWindow() { try {
+    async function closeWindow() { await noteAppendCompletion.current; if (notebook.busy || canvas.exporting || exportActive.current || importing.current) { setNotice('Finish the current Canvas or file operation before closing.'); return; } try {
+        await voiceController.current?.finishToDraft();
+        while(noteAppendActive.current)await noteAppendCompletion.current;
+        if(notebookCurrent.current.busy||canvasCurrent.current.exporting||exportActive.current||importing.current){setNotice("Finish the current file operation before closing.");return;}
+        finishEditing();
         interactionLocked.current = true; setTransitioning(true);
         ++loadToken.current;
         await Promise.all([cancelRequest(), summary.cancel(), pdfSearch.cancel(), generalChat.prepareToLeave()]);
@@ -829,6 +1021,149 @@ export default function App() {
     useEffect(() => { const handle = (event: BeforeUnloadEvent) => { if (closing.current)
         return; event.preventDefault(); event.returnValue = ''; void closeWindow(); }; window.addEventListener('beforeunload', handle); return () => window.removeEventListener('beforeunload', handle); }, []);
     useEffect(() => () => { const id = activeRequest.current; activeRequest.current = null; progressSubscription.current?.(); progressSubscription.current = null; void extraction.current!.cancel(); if (id) void api.cancelAI(id).catch(() => undefined); }, []);
+
+    automationHandlers.current.prepare=async id=>{if(current.current.paper?.id===id&&current.current.loaded)await flush();};
+    automationHandlers.current.append=async job=>{
+        if(job.kind!=='append-text')throw Error('Invalid note write');
+        if(interactionLocked.current||preparingRequest.current||exportActive.current||importing.current||focusBusy.current)throw Error('Finish the current editor operation before appending. The independent draft is preserved.');
+        const token=loadToken.current,id=current.current.paper?.id;
+        let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve});noteAppendCompletion.current=gate;noteAppendActive.current=true;
+        interactionLocked.current=true;setTransitioning(true);
+        try{
+            await flush();
+            const saved=await api.commitAutomationText(job.jobId);
+            if(current.current.paper?.id===job.paperId&&loadToken.current===token)updateState(saved);
+        }finally{release();noteAppendActive.current=false;if(loadToken.current===token&&current.current.paper?.id===id){interactionLocked.current=false;setTransitioning(false);}}
+    };
+    automationHandlers.current.region=async job=>{
+        const value=notebookCurrent.current,page=value.activePage;
+        if(current.current.paper?.id!==job.paperId||!page||page.id!==job.boardId||rightView!=='note'||noteTab!=='canvas'||!rightOpen)return null;
+        const svg=[...document.querySelectorAll<SVGSVGElement>('svg.notebook-page')].find(element=>element.getBoundingClientRect().width>0);
+        if(!svg)return null;
+        if(job.area==='region')return notebookSelectionBounds(page,value.selectedId);
+        const rect=svg.viewBox.baseVal;return rect.width>0&&rect.height>0?{x:rect.x,y:rect.y,width:rect.width,height:rect.height}:null;
+    };
+    if(speechDraft.current.paperText!==question){speechDraft.current.paperText=question;speechDraft.current.paperRevision++;}
+    if(speechDraft.current.generalText!==generalChat.draft){speechDraft.current.generalText=generalChat.draft;speechDraft.current.generalRevision++;}
+    const speechSources=[paper?.id,loadToken.current,paperState.lastPage,pageText,contextMode,selection,notesSources,chatImages.map(i=>i.imageId).join(','),generalContext,paperState.note,marks.value,canvas.mindMap,notebook.document];
+    if(speechSources.length!==speechSourceTuple.current.length||speechSources.some((value,index)=>!Object.is(value,speechSourceTuple.current[index]))){speechSourceTuple.current=speechSources;speechDraft.current.contextRevision++;}
+    function inputOwner():LocalInputOwner{
+        readVoiceDraftRevision(speechDraft.current,'paper',draftCurrent.current);
+        readVoiceDraftRevision(speechDraft.current,'general',generalChat.getDraft?.()??generalChat.draft);
+        return{conversationId:current.current.paper?'paper:'+current.current.paper.id:'general:'+(generalChat.state?.conversationId??'loading'),contextRevision:speechDraft.current.contextRevision,draftRevision:current.current.paper?speechDraft.current.paperRevision:speechDraft.current.generalRevision};
+    }
+    async function sendManualChatQuestion(){
+        if(manualVoiceSending.current||interactionLocked.current||closing.current||activeRequest.current||(!current.current.paper&&generalChat.busy))return;
+        const owner=inputOwner();manualVoiceSending.current=true;
+        const send=()=>new Promise<boolean>(resolve=>{
+            const now=inputOwner();
+            if(now.conversationId!==owner.conversationId||now.contextRevision!==owner.contextRevision||now.draftRevision!==owner.draftRevision||interactionLocked.current||closing.current||activeRequest.current||document.querySelector('[role="dialog"],[aria-modal="true"]')){resolve(false);return;}
+            let settled=false;const done=(saved:boolean)=>{if(!settled){settled=true;resolve(saved);}};
+            const dispatched=current.current.paper?sendQuestion('ask',undefined,undefined,()=>done(true)):generalChat.send(()=>done(true));
+            void dispatched.then(()=>done(false),error=>{setNotice(errorText(error));done(false);});
+        });
+        try{if(voiceController.current)await voiceController.current.sendSegment(send);else await send();}
+        catch(error){setNotice(errorText(error));}
+        finally{manualVoiceSending.current=false;}
+    }
+    function voiceDraftFor(owner:LocalInputOwner):string{
+        if(owner.conversationId.startsWith('paper:')){const id=owner.conversationId.slice(6);return current.current.paper?.id===id?draftCurrent.current:paperDrafts.current.get(id)??'';}
+        return owner.conversationId==='general:'+(generalChat.state?.conversationId??'')?(generalChat.getDraft?.()??generalChat.draft):'';
+    }
+    function revealVoiceDraft(owner:LocalInputOwner,text:string){
+        requestAnimationFrame(()=>{
+            if(owner.conversationId!==inputOwner().conversationId)return;
+            const element=owner.conversationId.startsWith('paper:')?questionInput.current:document.querySelector<HTMLTextAreaElement>('textarea[aria-label="General chat question"]');
+            if(element&&element.value===text&&element.selectionStart===element.selectionEnd)element.scrollTop=element.scrollHeight;
+        });
+    }
+    function writeVoiceDraft(owner:LocalInputOwner,text:string){
+        if(owner.conversationId.startsWith('paper:')){
+            const id=owner.conversationId.slice(6);
+            if(current.current.paper?.id===id){speechDraft.current.paperText=text;draftCurrent.current=text;setQuestion(text);}
+            else paperDrafts.current.set(id,text);
+        }else if(owner.conversationId==='general:'+(generalChat.state?.conversationId??'')){speechDraft.current.generalText=text;generalChat.setDraft(text);}
+        revealVoiceDraft(owner,text);
+    }
+    function beginVoiceTranscript(id:string,owner:LocalInputOwner){liveVoiceDraft.current.begin(id,owner,voiceDraftFor(owner));}
+    function previewVoiceTranscript(id:string,text:string,owner:LocalInputOwner){
+        const value=liveVoiceDraft.current.preview(id,text,owner,voiceDraftFor(owner),inputOwner());
+        if(value!==null)writeVoiceDraft(owner,value);
+    }
+    async function finishVoiceTranscript(id:string,text:string,owner:LocalInputOwner,options:VoiceTranscriptFinishOptions){
+        let maySend=options.send&&options.reason==='final';
+        if(maySend){try{await flush();}catch{maySend=false;}}
+        const result=liveVoiceDraft.current.finish(id,text,owner,voiceDraftFor(owner),inputOwner(),maySend);
+        if(!result)return;
+        writeVoiceDraft(owner,result.text);
+        if(result.send&&!interactionLocked.current&&!closing.current&&!activeRequest.current&&!document.querySelector('[role="dialog"],[aria-modal="true"]')&&!generalChat.busy){
+            const dispatched=current.current.paper?sendQuestion('ask',undefined,result.text):generalChat.send();
+            void dispatched.catch(error=>setNotice(errorText(error)));
+        }else if(options.send&&result.detached&&text.trim())setNotice('The input changed. Transcription was kept in its original draft without sending.','success');
+    }
+    function appendVoice(text:string,owner:LocalInputOwner){
+        if(owner.conversationId.startsWith('paper:')){
+            const id=owner.conversationId.slice(6);
+            if(current.current.paper?.id===id){const value=[draftCurrent.current,text].filter(Boolean).join('\n');draftCurrent.current=value;setQuestion(value);}
+            else{paperDrafts.current.set(id,[paperDrafts.current.get(id)??'',text].filter(Boolean).join('\n'));setNotice('Transcription kept in the original paper draft.','success');}
+        }else if(owner.conversationId==='general:'+(generalChat.state?.conversationId??''))generalChat.setDraft([generalChat.draft,text].filter(Boolean).join('\n'));
+    }
+    async function sendVoice(text:string,owner:LocalInputOwner){
+        await flush();
+        if(owner.conversationId!==inputOwner().conversationId||owner.contextRevision!==inputOwner().contextRevision||owner.draftRevision!==inputOwner().draftRevision||interactionLocked.current||closing.current||activeRequest.current||document.querySelector('[role="dialog"],[aria-modal="true"]')){appendVoice(text,owner);return;}
+        if(current.current.paper){const value=[draftCurrent.current,text].filter(Boolean).join('\n');draftCurrent.current=value;setQuestion(value);await sendQuestion('ask',undefined,value);}
+        else{generalChat.setDraft([generalChat.draft,text].filter(Boolean).join('\n'));await generalChat.send();}
+    }
+    function inputCommand(command:InteractionCommand){
+        if(interactionLocked.current||closing.current||document.querySelector('[role="dialog"],[aria-modal="true"]')||settingsOpen||helpOpen||noteReview||reuseReview||!current.current.loaded||readerView!=='reader')return;
+        if(command==='previous-page')void goToPage(current.current.state.lastPage-1);
+        else if(command==='next-page')void goToPage(current.current.state.lastPage+1);
+        else if(command==='scroll-up'||command==='scroll-down'){cancelPositionRestores();const element=readerRef.current;if(element)element.scrollBy({top:(command==='scroll-up'?-1:1)*readerScrollAmount(element,command==='scroll-up'?'up':'down'),behavior:'smooth'});}
+    }
+    function visibleChatOwner(owner:AgentOwner){return owner.kind==='paper'?current.current.paper?.id===owner.id&&!closing.current:!current.current.paper&&generalOwnerCurrent.current===owner.id&&!closing.current;}
+    async function runTurnAction(turn:AgentChatTurn,operation:()=>Promise<unknown>){
+        if(turnActionBusy)return;const sequence=++turnActionSequence.current;setTurnActionBusy(turn.taskId);
+        try{await operation()}catch(error){if(sequence===turnActionSequence.current&&visibleChatOwner(turn.owner))setNotice(errorText(error))}
+        finally{if(sequence===turnActionSequence.current)setTurnActionBusy('')}
+    }
+    async function reanswerChatTurn(turn:AgentChatTurn){
+        if(reanswerPreparation.current||turnActionBusy||interactionLocked.current||closing.current||!visibleChatOwner(turn.owner))return;
+        if(!settings.hasApiKey){setSettingsOpen(true);setNotice('Connect DeepSeek to answer again.');return;}
+        const source=turn.owner.kind==='general'?generalChat.state?.messages:current.current.state.messages;
+        const user=source?.find(message=>message.id===turn.userMessageId&&message.role==='user');if(!user){setNotice('The original saved question is unavailable.');return;}
+        reanswerPreparation.current=turn.taskId;const intent=navigationIntent.current;
+        try{
+            await voiceController.current?.finishToDraft();
+            if(intent!==navigationIntent.current||!visibleChatOwner(turn.owner)||interactionLocked.current||closing.current)return;
+            if(turn.owner.kind==='general'){
+                if(!generalChat.reanswerTask||generalChat.busy)return;
+                const pending=generalChat.reanswerTask(turn.taskId,user.content);reanswerPreparation.current=null;await pending;return;
+            }
+            const original=current.current.paper;if(!original||original.isDemo||!current.current.loaded||activeRequest.current)return;
+            const id=crypto.randomUUID(),userMessageId=crypto.randomUUID(),assistantMessageId=crypto.randomUUID(),token=loadToken.current;
+            activeRequest.current=id;preparingRequest.current=id;interactionLocked.current=true;setTransitioning(true);setRequestId(id);setPreview(null);setRequestStatus('Answering again from saved sources…');followAnswer.current=true;
+            reanswerPreparation.current=null;
+            const isCurrent=()=>activeRequest.current===id&&current.current.paper?.id===original.id&&current.current.loaded&&token===loadToken.current&&!closing.current;
+            try{
+                await noteAppendCompletion.current;await flush();if(!isCurrent())return;
+                const messages=projectAgentChatMessages(current.current.state.messages,paperTurnsCurrent.current,{kind:'paper',id:original.id});
+                if(messages.length+2>1000)throw Error('Conversation limit reached. Your draft is preserved.');
+                const next={...current.current.state,messages:[...messages,{id:userMessageId,paperId:original.id,role:'user' as const,content:user.content,createdAt:new Date().toISOString()}]};updateState(next);await enqueueSave(original.id,next);if(!isCurrent())return;
+                if(preparingRequest.current===id){preparingRequest.current=null;interactionLocked.current=false;setTransitioning(false);}
+                const task=await api.reanswerAgentChat({owner:turn.owner,taskId:turn.taskId,chatTurn:{requestId:id,userMessageId,assistantMessageId}});await noteAppendCompletion.current;if(!isCurrent()||!task.answer.trim())return;
+                const completed=appendAIResponse(current.current.state,original.id,task.answer,false,assistantMessageId);updateState(completed);await enqueueSave(original.id,completed);
+            }catch(error){if(isCurrent())setNotice(errorText(error))}
+            finally{if(preparingRequest.current===id){preparingRequest.current=null;if(token===loadToken.current){interactionLocked.current=false;setTransitioning(false)}}if(activeRequest.current===id){activeRequest.current=null;setRequestId(null);setRequestStatus('');setPreview(null)}}
+        }catch(error){if(visibleChatOwner(turn.owner))setNotice(errorText(error))}
+        finally{if(reanswerPreparation.current===turn.taskId)reanswerPreparation.current=null}
+    }
+    function openAgentPaper(id:string){window.dispatchEvent(new CustomEvent('paper-reader:open-imported-paper',{detail:{paperId:id}}));}
+    function showAgentReceipt(turn:AgentChatTurn,receipt:AgentReceipt,index:number){
+        if(receipt.kind==='export'||/note|draft/i.test(receipt.kind)&&receipt.id){setAgentResult({turn,receipt,index});return;}
+        if(receipt.paperId)openAgentPaper(receipt.paperId);
+    }
+    const agentTurnActions={busy:!!turnActionBusy,onContinue:(turn:AgentChatTurn,selectionId?:string)=>{void runTurnAction(turn,()=>api.continueAgent({owner:turn.owner,taskId:turn.taskId,...(selectionId?{selectionId}:{})}))},onCancel:(turn:AgentChatTurn)=>{void runTurnAction(turn,()=>api.cancelAgent(turn.taskId,turn.owner))},onOpenPaper:openAgentPaper,onReceipt:showAgentReceipt};
+    const voiceControls=api.localSpeech?<VoiceInputControls key={paper?.id??'welcome'} api={api.localSpeech} onController={registerVoiceController} callbacks={{getOwner:inputOwner,isInputBlocked:()=>interactionLocked.current||closing.current||!!document.querySelector('[role="dialog"],[aria-modal="true"]'),isBusy:()=>interactionLocked.current||closing.current||!!document.querySelector('[role="dialog"],[aria-modal="true"]')||!!activeRequest.current||(!current.current.paper&&generalChat.busy),appendTranscript:appendVoice,sendFinal:sendVoice,beginTranscript:beginVoiceTranscript,previewTranscript:previewVoiceTranscript,finishTranscript:finishVoiceTranscript}} onCommand={inputCommand} disabled={loading||(!paper&&!generalChat.ready)||!!paper&&!stateReady} suspended={transitioning||settingsOpen||!!helpOpen||!!noteReview||!!reuseReview}/>:undefined;
     return <div className={`app-shell${focusMode ? ' reading-focus' : ''}`}>
   <header className="titlebar">
     <div className="history-controls">
@@ -847,7 +1182,7 @@ export default function App() {
     <span className="brand-divider"/>
     <span className="brand-caption">A little clarity, every page.</span>
     </div>
-    <DesktopMenuBar api={api} disabled={transitioning || exporting || importBusy || settingsOpen || !!helpOpen || !!noteReview || !!reuseReview} onNotice={setNotice}/>
+    <DesktopMenuBar api={api} disabled={transitioning || exporting || importBusy || notebook.busy || canvas.exporting || settingsOpen || !!helpOpen || !!noteReview || !!reuseReview} onNotice={setNotice}/>
     <div className="window-actions">
     <button aria-label="Minimize window" onClick={() => void api.windowControl('minimize')}>
     <Minus size={15}/>
@@ -862,13 +1197,15 @@ export default function App() {
     </header>
   <div className="workspace">
     <aside className="sidebar">
+    <section className="sidebar-card sidebar-workspace-card" aria-label="Workspace navigation">
     <div className="section-label">
     <BookOpen size={16}/> WORKSPACE</div>
     <button className={`nav-button ${readerView === 'reader' ? 'active' : ''}`} onClick={() => changeReaderView('reader')}>
     <BookOpen size={18}/>Reader</button>
     <button className={`nav-button ${readerView === 'summary' ? 'active' : ''}`} onClick={() => changeReaderView('summary')}>
     <FileText size={18}/>Summary</button>
-    <div className="sidebar-separator"/>
+    </section>
+    <section className="sidebar-card sidebar-library-card" aria-label="Paper library">
     <div className="library-title">
     <span>
     <Library size={17}/>Library</span>
@@ -886,7 +1223,7 @@ export default function App() {
     <button className={sort === 'category' ? 'selected' : ''} onClick={() => setSort('category')}>
     <Tag size={13}/>Category</button>
     </div>
-    <LibraryBrowser api={api} papers={effectivePapers} paper={paper} query={query} sort={sort} metadataReady={metadataReady} onMetadataSave={savePaperInformation} onOpen={item => void openPaper(item)} onImport={() => void importPaper()} onNotice={setNotice}/>
+    <LibraryBrowser revision={libraryRevision} onLibraryChange={()=>void refreshAutomationLibrary()} activity={activity.value} activityReady={activity.ready} activityError={activity.error} onRetryActivity={() => void activity.load()} api={api} papers={effectivePapers} paper={paper} query={query} sort={sort} metadataReady={metadataReady} onMetadataSave={savePaperInformation} onOpen={item => void openPaper(item)} onImport={() => void importPaper()} onNotice={setNotice}/>
     <div className="sidebar-bottom">
     <div className="local-label">
     <span />Local workspace</div>
@@ -894,8 +1231,9 @@ export default function App() {
     <Settings size={17}/>Settings<span className={settings.hasApiKey ? 'connected-dot' : 'offline-dot'}/>
     </button>
     </div>
+    </section>
     </aside>
-  <main className="main-workspace">{!paper ? <Welcome onImport={() => void importPaper()} onDemo={() => void openPaper(demoPaper)} generalChat={<GeneralChatPanel workspace={generalChat} model={settings.model} disabled={transitioning || loading || exporting}/>}/> : <>
+  <main className="main-workspace">{!paper ? <Welcome onImport={() => void importPaper()} onDemo={() => void openPaper(demoPaper)} generalChat={<GeneralChatPanel onReanswer={turn=>void reanswerChatTurn(turn)} turns={generalTurns.turns} agentPreviews={generalTurns.previews} turnActions={agentTurnActions} onTaskHistory={()=>{if(generalChat.state)setTaskHistoryOwner({kind:'general',id:generalChat.state.conversationId})}} contextControl={<div className="general-chat-context"><label className="context-choice">Context<select aria-label="General chat context" value={generalContext} disabled={generalChat.busy||transitioning} onChange={event=>setGeneralContext(event.target.value as GeneralContextChoice)}><option value="general">General question</option><option value="library">All library papers</option></select></label>{generalTurns.error&&<p className="automation-error">{generalTurns.error}<button onClick={()=>void generalTurns.reload()}>Retry activities</button></p>}</div>} inputControls={voiceControls} workspace={generalChat} onSend={sendManualChatQuestion} model={settings.model} disabled={transitioning || loading || exporting}/>}/> : <>
         <div className="reading-grid" style={{ gridTemplateColumns: rightOpen ? `minmax(0,1fr) 8px ${rightWidth}px` : 'minmax(0,1fr)' }}>
         <section className="reader-panel reading-pane">
         <div className="reader-toolbar">
@@ -923,34 +1261,34 @@ export default function App() {
             <ZoomIn size={17}/>
             </button>
             </>}<button className={`icon-button focus-toggle${focusMode ? ' active' : ''}`} aria-label={focusMode ? 'Exit reading focus' : 'Enter reading focus'} title={focusMode ? 'Exit focus · F11 / Escape' : 'Reading focus · F11'} disabled={transitioning || loading || !stateReady || readerView !== 'reader'} onClick={() => void toggleFocus()}>{focusMode ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}</button>
-            <button className="icon-button assistant-toggle" aria-label={rightOpen ? 'Hide assistant panel' : 'Show assistant panel'} onClick={() => { finishEditing(); setRightOpen(value => !value); }}>{rightOpen ? <PanelRightClose size={17}/> : <PanelRightOpen size={17}/>}</button>
+            <button className="icon-button assistant-toggle" aria-label={rightOpen ? 'Hide assistant panel' : 'Show assistant panel'} onClick={() => void switchNoteView(() => setRightOpen(value => !value))}>{rightOpen ? <PanelRightClose size={17}/> : <PanelRightOpen size={17}/>}</button>
         </div>
         </div>
         {readerView === 'reader' && !paper.isDemo && <div className="pdf-ink-toolbar">
             <div className="pdf-mode-controls">
               <button aria-label="Read PDF" aria-pressed={!drawing && interactionMode === 'read'} className={!drawing && interactionMode === 'read' ? 'active' : ''} onClick={() => changePdfMode('read')}><BookOpen size={12}/>Read</button>
               <button aria-label="Hand tool" aria-pressed={interactionMode === 'hand'} className={interactionMode === 'hand' ? 'active' : ''} disabled={transitioning || loading || !stateReady} onClick={() => changePdfMode('hand')}><Hand size={12}/>Hand</button>
-              <button aria-label="Capture PDF region" aria-pressed={interactionMode === 'capture'} className={interactionMode === 'capture' ? 'active' : ''} disabled={transitioning || loading || !stateReady || !canvas.ready} onClick={() => changePdfMode('capture')}><ScanLine size={12}/>Capture</button>
+              <button aria-label="Capture PDF region" aria-pressed={interactionMode === 'capture'} className={interactionMode === 'capture' ? 'active' : ''} disabled={transitioning || loading || !stateReady} onClick={() => changePdfMode('capture')}><ScanLine size={12}/>Capture</button>
               <button aria-label="Draw on PDF" aria-pressed={drawing && !erasing} className={drawing && !erasing ? 'active' : ''} disabled={transitioning || loading || !pdfInk.ready} onClick={() => { changePdfMode('read'); setDrawing(true); setErasing(false); }}><PenLine size={12}/>Draw</button>
               <button aria-label="Erase PDF strokes" title="Erase whole strokes; undo is available" aria-pressed={drawing && erasing} className={drawing && erasing ? 'active' : ''} disabled={transitioning || loading || !pdfInk.ready} onClick={() => { changePdfMode('read'); setDrawing(true); setErasing(true); }}><Eraser size={12}/>Erase</button>
             </div>
-            <div className="ink-colors">{[{ name: 'Slate', value: '#334155' }, { name: 'Coral', value: '#ed6376' }, { name: 'Mint', value: '#4b8f82' }].map(color => <button key={color.value} aria-label={`${color.name} PDF pen`} aria-pressed={inkColor === color.value} disabled={!drawing || erasing || transitioning} className={inkColor === color.value ? 'selected' : ''} style={{ '--pen-color': color.value } as React.CSSProperties} onClick={() => setInkColor(color.value)}/>)}</div>
+            <div className="ink-colors"><ColorPicker label="PDF pen color" value={inkColor} onChange={setInkColor} disabled={!drawing || erasing || transitioning}/></div>
             <button className="icon-button" aria-label="Undo PDF stroke" disabled={transitioning || !pdfInk.canUndo(paperState.lastPage) || !!pdfInk.draft} onClick={() => pdfInk.undo(paperState.lastPage)}><Undo2 size={14}/></button><button className="icon-button" aria-label="Redo PDF stroke" disabled={transitioning || !pdfInk.canRedo(paperState.lastPage) || !!pdfInk.draft} onClick={() => pdfInk.redo(paperState.lastPage)}><Redo2 size={14}/></button>
             <small>{drawing ? `${erasing ? 'Erase whole strokes' : 'Draw'} on page ${paperState.lastPage} · ` : 'PDF ink · '}{pdfInk.status}</small>
             <div className="reading-tool-actions"><button ref={navigationButton} aria-label="PDF contents" aria-controls="pdf-navigation" aria-expanded={navigationOpen} disabled={transitioning || loading || !bytes} onClick={() => { finishEditing(); setNavigationOpen(value => !value); }}><BookOpen size={12}/>Contents</button><button aria-label="Find in PDF" aria-expanded={searchOpen} disabled={transitioning || loading || !bytes} onClick={() => { pdfInk.finish(); setDrawing(false); setSearchOpen(value => !value); }}><Search size={12}/>Find</button><button aria-label="Export annotated PDF" disabled={exporting || transitioning || loading || !bytes || !stateReady || !marks.ready || !pdfInk.ready || !!requestId || summary.busy} onClick={() => void exportPdf()}><Download size={12}/>{exporting ? 'Exporting…' : 'Export PDF'}</button></div>
-            <details className="pdf-export-help"><summary>About PDF export</summary><p>Save to a new file name. The copy keeps searchable text, highlights, PDF drawings and comments. Visible marks are flattened; edit them here in Paper Reader. The separate Note Ink pad is excluded. Your original PDF stays unchanged.</p></details>
+            <details className="pdf-export-help"><summary>About PDF export</summary><p>Save to a new file name. The copy keeps searchable text, highlights, PDF drawings and comments. Visible marks are flattened; edit them here in Paper Reader. Canvas and Mind map are exported separately as PNG. Your original PDF stays unchanged.</p></details>
         </div>}
         {readerView === 'reader' && !paper.isDemo && searchOpen && <PdfSearchBar search={pdfSearch} disabled={transitioning || loading || !stateReady} focusToken={searchFocus} onClose={() => setSearchOpen(false)} onNavigate={goToPage}/>}
         <div className="reader-body">
         {readerView === 'reader' && !paper.isDemo && bytes && navigationOpen && <PdfNavigation key={paper.id} api={api} paperId={paper.id} page={paperState.lastPage} disabled={transitioning || loading || !stateReady} onNavigate={goToPage} onClose={closeNavigation}/>}
         <div ref={readerRef} className={`reader-content ${readerView === 'summary' ? 'summary-content' : ''}`} onWheel={cancelPositionRestores} onPointerDownCapture={cancelPositionRestores} onScroll={rememberLocation} onMouseUp={selectText}>{loading ? <div className="pane-empty">
-            <span className="loading-dot"/>Opening your paper…</div> : readerView === 'summary' ? paper.isDemo ? <SummaryView /> : <PaperSummaryView summary={summary.value} ready={summary.ready} busy={summary.busy} status={summary.status} onGenerate={generateSummary} onCancel={() => void summary.cancel()} onRetry={() => void summary.open(paper.id)} onPage={goToPage} sources={<SourceIndexPanel key={paper.id} api={api} paperId={paper.id} disabled={transitioning || loading || !stateReady || exporting} onPage={goToPage}/>}/> : paper.isDemo ? <div className="demo-scale" style={{ width: `${zoom}%` }}>
+            <span className="loading-dot"/>Opening your paper…</div> : readerView === 'summary' ? paper.isDemo ? <SummaryView /> : <PaperSummaryView draft={summary.draft} onCopyDraft={() => void summary.copyDraft()} job={summary.job} onResume={resumeSummary} language={summary.language} onLanguage={summary.setLanguage} detailMode={summaryDetail} summary={summary.value} ready={summary.ready} busy={summary.busy} status={summary.status} onGenerate={generateSummary} onCancel={() => void summary.cancel()} onRetry={() => void summary.open(paper.id)} onPage={goToPage} sources={<SummaryEvidencePanel key={paper.id} api={api} paperId={paper.id} language={summary.language} onDetailChange={setSummaryDetail} disabled={transitioning || loading || !stateReady || exporting} onPage={goToPage}/>}/> : paper.isDemo ? <div className="demo-scale" style={{ width: `${zoom}%` }}>
             <DemoArticle />
-            </div> : bytes ? <PdfReader key={paper.id} file={pdfFile} page={paperState.lastPage} width={readerWidth * zoom / 100} highlights={marks.value.highlights} searchQuery={searchOpen ? pdfSearch.highlightQuery : ''} interactionMode={interactionMode} scrollElement={readerRef.current} onCapture={addPdfCapture} onRendered={page => {
+            </div> : bytes ? <PdfReader key={paper.id} file={pdfFile} page={paperState.lastPage} width={readerWidth * zoom / 100} highlights={marks.value.highlights} searchQuery={searchOpen ? pdfSearch.highlightQuery : ''} interactionMode={interactionMode} scrollElement={readerRef.current} onCapture={handlePdfCapture} onRendered={page => {
                 if (current.current.paper?.id !== paper.id || current.current.state.lastPage !== page) return;
                 const generation = focusPosition.current!.generation;
                 const historyGeneration = historyPosition.current!.generation;
-                renderedWidth.current = readerRef.current?.querySelector<HTMLCanvasElement>('.react-pdf__Page__canvas')?.getBoundingClientRect().width ?? 0;
+                renderedWidth.current = readerRef.current?.querySelector<HTMLCanvasElement>('[data-pdf-frame-state="active"] .react-pdf__Page__canvas')?.getBoundingClientRect().width ?? 0;
                 requestAnimationFrame(() => {
                     if (current.current.paper?.id !== paper.id || current.current.state.lastPage !== page) return;
                     restoreReaderPosition(page, historyGeneration); focusPosition.current!.rendered(generation);
@@ -967,7 +1305,7 @@ export default function App() {
         <div className="reader-status">
         <span>
         <span className="status-dot"/>{readerView === 'summary' ? 'Summary view' : paper.isDemo ? 'Original HTML demonstration' : 'Text-based PDF · Local file'}</span>
-        <span>{interactionMode === 'hand' ? 'Drag the page to move around' : interactionMode === 'capture' ? 'Drag a region, then add it to Canvas' : selection ? `${selection.length} characters selected` : 'Select a passage to ask about it'}</span>
+        <span>{interactionMode === 'hand' ? 'Drag the page to move around' : interactionMode === 'capture' ? 'Drag a region to chat, copy, save or add to Canvas' : selection ? `${selection.length} characters selected` : 'Select a passage to ask about it'}</span>
         </div>
         </section>{rightOpen && <>
             <div className="resize-handle" onPointerDown={startResize} role="separator" aria-label="Resize assistant panel" aria-orientation="vertical"/>
@@ -975,21 +1313,9 @@ export default function App() {
             <div className="right-tabs">
             <button className={rightView === 'chat' ? 'active' : ''} onClick={() => changeRightView('chat')}>
             <MessageCircle size={17}/>Chat</button>
-            <button className={rightView === 'note' ? 'active' : ''} onClick={() => changeRightView('note')}>
+            <button className={rightView === 'note' ? 'active' : ''} onDragEnter={event => { if (event.dataTransfer.types.includes(EVIDENCE_DRAG_MIME) && !transitioning && !loading && stateReady && !exporting) { void switchNoteView(() => { setRightView('note'); setNoteTab('canvas'); }); } }} onClick={() => changeRightView('note')}>
             <StickyNote size={17}/>Note</button>
             </div>{rightView === 'chat' ? <>
-                <div className="assistant-heading">
-                <span className="assistant-avatar">
-                <Sparkles size={16}/>
-                </span>
-                <div>
-                <strong>Reading assistant</strong>
-                <small>{settings.hasApiKey ? settings.model : 'Connect DeepSeek to begin'}</small>
-                </div>
-                <button className="icon-button" aria-label="AI connection settings" onClick={() => setSettingsOpen(true)}>
-                <Settings size={15}/>
-                </button>
-                </div>
                 <ConversationSearch key={`${paper.id}:${conversationSession}`} paperId={paper.id} messages={conversationMessages} disabled={transitioning || loading || !stateReady} onNavigate={navigateConversation} onActiveChange={changeConversationSearch}/>
                 {!paper.isDemo && requests.error && <div className="request-history-error" role="alert"><p>Saved original requests are unavailable: {requests.error}</p><button disabled={!!requestId || transitioning} onClick={() => void requests.refresh()}>Retry request history</button></div>}
                 <div ref={chatScroll} className="chat-scroll" onScroll={event => { const node = event.currentTarget; if (!conversationSearchActive.current) followAnswer.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80; }}>{!paper.isDemo && paperState.messages.length === 0 && <div className="chat-empty">
@@ -1002,23 +1328,26 @@ export default function App() {
                     </button>
                     <button onClick={() => setQuestion('Explain the key terms on this page.')}>Explain the key terms<ChevronRight size={13}/>
                     </button>
-                    </div>}{conversationMessages.map(message => <div className={`chat-message ${message.role}${selectedMessage === message.id ? ' conversation-selected' : ''}`} key={message.id} data-message-id={message.id}>
-                    <div className="message-label">{message.role === 'assistant' ? <Bot size={14}/> : null}<strong>{message.role === 'assistant' ? 'Assistant' : 'You'}</strong>
-                    <span>{message.isDemo ? 'DEMO' : new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>}{conversationMessages.map(message => {
+                    const turn=message.role==='user'?paperTurnByUser.get(message.id):paperTurnByAssistant.get(message.id),streamed=message.role==='assistant'?agentChatPreviewForTurn(turn,paperTurns.previews):undefined,record=requests.recordForMessage(message.id);
+                    return <Fragment key={message.id}><div className={`chat-message ${message.role}${selectedMessage === message.id ? ' conversation-selected' : ''}${streamed?' agent-answer-preview':''}`} data-message-id={message.id} aria-label={streamed?'Answer in progress':undefined}>
+                    <div className="message-label">{message.role === 'assistant' ? <Bot size={14}/> : null}<strong>{message.role === 'assistant' ? 'Assistant' : 'You'}</strong>{message.role==='assistant'&&turn?.answerReplayOf&&<small title="Answer again from the saved model and sources">Saved sources</small>}
+                    <span>{streamed?'Receiving · not saved':message.isDemo ? 'DEMO' : new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    {message.role === 'assistant' ? <MarkdownContent content={message.content}/> : <p>{message.content}</p>}
-                    {message.role === 'assistant' && <div className="message-actions"><CopyAnswer content={message.content} copy={api.copyText}/>{extractNoteProposal(message) && <button className="review-note-action" aria-label="Review suggestion" disabled={transitioning || loading || !stateReady || !!requestId} onClick={() => reviewNoteSuggestion(message)}><StickyNote size={12}/>Review suggestion</button>}</div>}
-                    {message.role === 'user' && <><QuestionActions content={message.content} disabled={transitioning || loading || !stateReady} onReuse={reuseQuestion}/>{paper.isDemo || requests.ready ? <RequestRetryButton record={requests.recordForMessage(message.id)} disabled={transitioning || loading || !stateReady || !!requestId || !requests.ready} onRetry={record => void retryOriginalRequest(record)}/> : <small>{requests.error ? 'Request history unavailable' : 'Loading original requests…'}</small>}</>}
-                    </div>)}{requestId && preview?.requestId === requestId && preview.content && <div className="chat-preview" aria-label="Answer in progress"><div className="message-label"><Bot size={14}/><strong>Assistant</strong><span>IN PROGRESS</span></div><MarkdownContent content={preview.content}/></div>}{requestId && <div className="thinking" role="status">
-                    <span className="loading-dot"/>{requestStatus}</div>}</div>
+                    {message.role === 'user' && <ChatImageStrip paperId={paper.id} images={record?.context.images||sentImages[message.id]||[]} readImage={api.readAIImage} label="Images used in this question" disabled={transitioning||!!requestId} onReuse={image=>{if(chatImagesCurrent.current.length>=AI_IMAGE_LIMIT&&!chatImagesCurrent.current.some(i=>i.imageId===image.imageId)){setNotice('A question supports up to 8 image attachments.');return;}setChatImages(previous=>previous.some(i=>i.imageId===image.imageId)?previous:[...previous,image]);questionInput.current?.focus();setNotice('Saved image attached to your next question.','success');}}/>}{message.role === 'assistant' ? <MarkdownContent content={message.content}/> : <p>{message.content}</p>}
+                    {message.role === 'assistant' && !streamed && <div className="message-actions"><CopyAnswer content={message.content} copy={api.copyText}/>{turn&&!streamed&&turn.answer.trim()&&!(['queued','running','waiting-selection'].includes(turn.status))&&<button className="answer-again-action" aria-label="Answer again" title="Use the saved model and sources; completed actions are not repeated" disabled={transitioning||loading||!!requestId||!!turnActionBusy} onClick={()=>void reanswerChatTurn(turn)}><Redo2 size={12}/>Answer again</button>}{extractNoteProposal(message) && <button className="review-note-action" aria-label="Review suggestion" disabled={transitioning || loading || !stateReady || !!requestId} onClick={() => reviewNoteSuggestion(message)}><StickyNote size={12}/>Review suggestion</button>}</div>}
+                    {message.role === 'user' && <><QuestionActions content={message.content} disabled={transitioning || loading || !stateReady} onReuse={reuseQuestion}/>{record&&<RequestRetryButton record={record} disabled={transitioning || loading || !stateReady || !!requestId || !requests.ready} onRetry={value => void retryOriginalRequest(value)}/>}</>}
+                    </div>{turn&&message.role==='user'&&<><AgentTurnActivity {...agentTurnActions} turn={turn} placement="activity"/>{!paperAssistantIds.has(turn.assistantMessageId)&&<AgentTurnActivity {...agentTurnActions} turn={turn} placement="results"/>}</>}{turn&&message.role==='assistant'&&<AgentTurnActivity {...agentTurnActions} turn={turn} placement="results"/>}</Fragment>;
+                    })}{requestId && preview?.requestId === requestId && preview.content && !paperTurns.turns.some(turn=>turn.requestId===requestId) && <div className="chat-preview" aria-label="Answer in progress"><div className="message-label"><Bot size={14}/><strong>Assistant</strong><span>IN PROGRESS</span></div><MarkdownContent content={preview.content}/></div>}{requestId&&!paperTurns.turns.some(turn=>turn.requestId===requestId)&&<div className="thinking" role="status"><span className="loading-dot"/>{requestStatus}</div>}{paperTurns.error&&<div className="request-history-error" role="alert"><p>Saved activities are unavailable: {paperTurns.error}</p><button onClick={()=>void paperTurns.reload()}>Retry activities</button></div>}</div>
                 <div className="assistant-footer">
-                <span className={settings.hasApiKey ? 'connected-dot' : 'offline-dot'}/>{settings.hasApiKey ? 'DeepSeek key configured' : 'Your API key is not connected'}<button onClick={() => setSettingsOpen(true)}>{settings.hasApiKey ? 'Manage' : 'Connect'}</button>
+                <span className={settings.hasApiKey ? 'connected-dot' : 'offline-dot'}/>{settings.hasApiKey ? 'DeepSeek key configured' : 'Your API key is not connected'}{!paper.isDemo&&<button className="agent-task-history-button" aria-label="Task history" onClick={()=>setTaskHistoryOwner({kind:'paper',id:paper.id})}><History size={11}/>History</button>}<button onClick={() => setSettingsOpen(true)}>{settings.hasApiKey ? 'Manage' : 'Connect'}</button>
                 </div>
-                </> : <ReadingNotes paperId={paper.id} note={paperState.note} placeholder={paper.isDemo ? demoInitial.note : 'Capture an idea, a question, or a passage to revisit…'} noteReady={!transitioning && !loading && stateReady} noteStatus={saveStatus} marks={marks.value} marksReady={!transitioning && !paper.isDemo && marks.ready} marksStatus={paper.isDemo ? 'Open a PDF to add marks' : marks.status} tab={noteTab} onTab={changeNoteTab} onNote={changeNote} onMarks={changeMarks} canvas={<NoteCanvas onSourcePage={goToPage} onExport={() => void exportCanvas()} workspace={canvas} disabled={transitioning || loading || !stateReady || paper.isDemo || exporting}/>} canvasReady={!transitioning && !loading && !paper.isDemo && canvasBoardReady} canvasStatus={paper.isDemo ? "Open a PDF to use Canvas" : canvasBoardStatus} canvasCount={canvasBoardCount} undoAdoption={noteUndo ? { enabled: canUndoAdoption(noteUndo, paper.id, paperState.note), onUndo: undoNoteSuggestion } : undefined} ink={{ draft: marks.draft, onBegin: (color, point) => !interactionLocked.current && marks.beginInk(paper.id, color, point), onPoint: marks.inkPoint, onFinish: marks.finishInk, onEraseBegin: (point, bounds) => !interactionLocked.current && marks.beginEraseInk(paper.id, point, bounds), onErasePoint: marks.eraseInkPoint, onEraseFinish: marks.finishEraseInk, onUndo: marks.undoInk, onRedo: marks.redoInk, canUndo: marks.canUndoInk, canRedo: marks.canRedoInk }} highlightEditing={{ onColor: marks.setHighlightColor, onRemove: marks.removeHighlight, onUndo: marks.undoHighlight, onRedo: marks.redoHighlight, canUndo: marks.canUndoHighlight, canRedo: marks.canRedoHighlight }} onPage={goToPage} onSave={() => void flush().catch(() => undefined)} onNotice={setNotice} onOrganize={() => void sendQuestion('organize-notes')} organizing={!!requestId} onExport={() => void exportNotes()} exporting={exporting} exportReady={!transitioning && !loading && !paper.isDemo && stateReady && marks.ready && pdfInk.ready && summary.ready && !summary.busy && !requestId}/>}</aside>
+                </> : <ReadingNotes registerNoteCommit={registerNoteCommit} paperId={paper.id} note={paperState.note} placeholder={paper.isDemo ? demoInitial.note : 'Capture an idea, a question, or a passage to revisit…'} noteReady={!transitioning && !loading && stateReady} noteStatus={saveStatus} marks={marks.value} marksReady={!transitioning && !paper.isDemo && marks.ready} marksStatus={paper.isDemo ? 'Open a PDF to add marks' : marks.status} tab={noteTab} onTab={changeNoteTab} onNote={changeNote} onMarks={changeMarks} canvas={<NotebookCanvas onSourcePage={goToPage} onExport={options => void exportCanvas(options)} workspace={notebook} disabled={transitioning || loading || !stateReady || paper.isDemo || exporting}/>} mindMap={<StandaloneMindMap workspace={canvas} onExport={() => void exportMindMap()} onAddToCanvas={addMindMapToCanvas} canvasReady={canvasBoardReady} copyingToCanvas={transitioning} disabled={transitioning || loading || !stateReady || paper.isDemo || exporting || notebook.busy}/>} mindMapReady={!transitioning && !loading && mapBoardReady} mindMapStatus={paper.isDemo ? 'Open a PDF to use Mind map' : canvas.mapStatus} mindMapCount={canvas.mindMap.nodes.length} onAddHighlightToCanvas={addHighlightToCanvas} canvasImportReady={!transitioning && !loading && canvasBoardReady && stateReady && !exporting} canvasImporting={transitioning || notebook.busy} canvasReady={!transitioning && !loading && !paper.isDemo && canvasBoardReady} canvasStatus={paper.isDemo ? "Open a PDF to use Canvas" : canvasBoardStatus} canvasCount={canvasBoardCount} undoAdoption={noteUndo ? { enabled: canUndoAdoption(noteUndo, paper.id, paperState.note), onUndo: undoNoteSuggestion } : undefined} highlightEditing={{ onColor: marks.setHighlightColor, onRemove: marks.removeHighlight, onUndo: marks.undoHighlight, onRedo: marks.redoHighlight, canUndo: marks.canUndoHighlight, canRedo: marks.canRedoHighlight }} onPage={goToPage} onSave={() => void flush().catch(() => undefined)} onNotice={setNotice} onOrganize={() => void sendQuestion('organize-notes')} organizing={!!requestId} onExport={() => void exportNotes()} exporting={exporting} exportReady={!transitioning && !loading && !paper.isDemo && stateReady && marks.ready && pdfInk.ready && summary.ready && !summary.busy && !requestId}/>}</aside>
             </>}</div>
         <div className="composer">
         <div className="context-strip">
-        <label className="context-choice">Context<select aria-label="AI context" value={contextMode} disabled={transitioning || !!requestId} onChange={event => setContextMode(event.target.value as AIContextMode)}><option value="page">Current page</option><option value="paper" disabled={paper.isDemo}>Whole paper</option><option value="notes">Notes only</option><option value="paper-notes" disabled={paper.isDemo}>Paper + notes</option></select></label>
+        <label className="context-choice">Context<select aria-label="AI context" value={contextMode} disabled={transitioning || !!requestId} onChange={event => setContextMode(event.target.value as ChatContextChoice)}><option value="page">Current page</option><option value="paper" disabled={paper.isDemo}>Whole paper</option><option value="notes">Notes only</option><option value="paper-notes" disabled={paper.isDemo}>Paper + notes</option><option value="library" disabled={paper.isDemo}>All library papers</option></select></label>
+        {(contextMode==='notes'||contextMode==='paper-notes')&&!paper.isDemo&&<ChatNotesSources value={notesSources} pages={notebook.document.pages} currentPageId={notebook.document.activePageId} disabled={transitioning||!!requestId} onChange={setNotesSources}/>}
         {contextMode === 'page' && <>
         <span>
         <FileText size={12}/>{selection ? 'Selected passage' : 'Current page'} · {paperState.lastPage}</span>{selection && <>
@@ -1031,24 +1360,19 @@ export default function App() {
             </button>
             </>}</>}
         </div>
-        <div className="context-disclosure">{scopeDescriptions[contextMode]}{(contextMode === 'paper' || contextMode === 'paper-notes') && <span> Up to 200 pages / 240,000 text characters. Image-only pages have no readable text.</span>}</div>
+        <ChatImageStrip paperId={paper.id} images={chatImages} readImage={api.readAIImage} onRemove={id=>setChatImages(previous=>previous.filter(i=>i.imageId!==id))} disabled={!!requestId||transitioning}/>
         <div className="composer-input">
         <Sparkles size={18}/>
-        <textarea ref={questionInput} aria-label="Question about this paper" placeholder={contextMode === 'page' ? 'Ask a question about this page…' : contextMode === 'notes' ? 'Ask about your text notes…' : 'Ask a question about this paper…'} disabled={transitioning || !stateReady || loading || !!reuseReview} value={question} onChange={event => { draftCurrent.current = event.target.value; setQuestion(event.target.value); }} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) {
+        <textarea ref={questionInput} aria-label="Question about this paper" placeholder={contextMode === 'page' ? 'Ask a question about this page…' : contextMode === 'notes' ? 'Ask about your selected notes…' : contextMode==='library'?'Ask a question or give the library a task…':'Ask a question about this paper…'} disabled={transitioning || !stateReady || loading || !!reuseReview} value={question} onChange={event => { draftCurrent.current = event.target.value; setQuestion(event.target.value); }} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            void sendQuestion();
-        } }}/>{requestId ? <button className="send-button cancel" aria-label="Cancel AI request" onClick={() => void cancelRequest()}>
+            void sendManualChatQuestion();
+        } }}/>{voiceControls}{requestId ? <button className="send-button cancel" aria-label="Cancel AI request" onClick={() => void cancelRequest()}>
             <X size={17}/>
-            </button> : <button className="send-button" aria-label="Send question" disabled={!question.trim() || loading || transitioning || !stateReady} onClick={() => void sendQuestion()}>
+            </button> : <button className="send-button" aria-label="Send question" disabled={!question.trim() || loading || transitioning || !stateReady} onClick={() => void sendManualChatQuestion()}>
             <ArrowUp size={19}/>
             </button>}</div>
         </div>
-        </>}{notice && <div className="notice" role="status">
-        <span>{notice}</span>
-        <button className="icon-button" aria-label="Dismiss notice" onClick={() => setNotice('')}>
-        <X size={15}/>
-        </button>
-        </div>}</main>
+        </>}</main>
     </div>
   <SelectionToolbar selection={paper && readerView === 'reader' && !drawing && isCurrentSelection(selectionMenu, paper.id, paperState.lastPage) ? selectionMenu : null} onAction={selectionAction} onDismiss={() => setSelectionMenu(null)} disabled={transitioning || loading || !stateReady || !!requestId} canHighlight={marks.ready && !!selectedRects.current}/>
   {noteReview && paper?.id === noteReview.paperId && <NoteSuggestionReview paperId={noteReview.paperId} originalNote={noteReview.originalNote} proposal={noteReview.proposal} disabled={transitioning || loading || !stateReady} onApply={applyNoteSuggestion} onClose={() => setNoteReview(null)}/>}
@@ -1081,11 +1405,14 @@ export default function App() {
         </label>
         <div className="privacy-note">
         <BookOpen size={15}/>
-        <span>The key is encrypted on this device. Sending shares the selected context with DeepSeek: page, full paper, notes, or paper plus notes. Notes only excludes paper text and recent chat.</span>
+        <span>The key is encrypted on this device. Sending shares the selected sources with DeepSeek. Notes only excludes paper text and recent chat. All library papers starts with metadata and reads relevant papers as needed.</span>
         </div>
         <button className="primary-button modal-save" disabled={!model.trim() || savingSettings} onClick={() => void saveSettings()}>{savingSettings ? 'Saving…' : 'Save connection'}<Check size={16}/>
-        </button>{notice && <p className="settings-error" role="status">{notice}</p>}</section>
+        </button></section>
         </div>}
+ {taskHistoryOwner&&<div className="automation-modal-backdrop" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setTaskHistoryOwner(null)}}}><section className="automation-modal agent-chat-task-history" role="dialog" aria-modal="true" aria-label="Task history"><header><div><small>SAVED ACTIVITIES</small><h2>Task history</h2></div><button className="icon-button" aria-label="Close task history" onClick={()=>setTaskHistoryOwner(null)}><X size={18}/></button></header><AgentTasksPanel api={api} owner={taskHistoryOwner} onNotice={setNotice} onChanged={()=>{void paperTurns.reload();void generalTurns.reload()}}/></section></div>}
+ {agentResult&&<AgentResultDialog api={api} selection={agentResult} onClose={()=>setAgentResult(null)} onNotice={setNotice}/>}
+ <AppToast toast={toast} onDismiss={dismissNotice}/>
  </div>;
 }
 

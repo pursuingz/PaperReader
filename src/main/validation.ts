@@ -1,3 +1,5 @@
+import { validateAIImages, validateChatNotesSnapshot, hasChatNotes } from './aiSourceValidation'
+import { isHighlightColor } from '../shared/colors'
 import type { AIRequest, PaperState, PaperSummary, ReadingMarks, SettingsInput, SummaryRequest, SummarySection } from '../shared/types'
 export function validId(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(value)) throw new Error('Invalid identifier')
@@ -48,12 +50,15 @@ export function validateRequest(value: unknown): asserts value is AIRequest {
     }
     if (characters > 240_000) throw new Error('Paper text exceeds the 240000 character AI limit')
   }
-  const hasNotes = typeof value.context.note === 'string' && Boolean(value.context.note.trim())
-  if (mode === 'page' && !value.context.pageText.trim() && !(value.context.selection as string | undefined)?.trim()) throw new Error('Select text or wait for the current PDF page text before asking AI.')
-  if (mode === 'notes' && !hasNotes) throw new Error('Write a text note before asking AI about notes.')
-  if ((mode === 'notes' || mode === 'paper-notes') && typeof value.context.note !== 'string') throw new Error('Notes context requires a text note')
-  if (mode === 'paper' && !hasPaperText) throw new Error('This paper has no extracted text. OCR is not available.')
-  if (mode === 'paper-notes' && !hasPaperText && !hasNotes) throw new Error('This paper has no extracted text and the notes are empty.')
+  if(value.context.notesSnapshot!==undefined){validateChatNotesSnapshot(value.context.notesSnapshot);if(!['notes','paper-notes'].includes(mode as string))throw Error('Notes snapshot requires Notes context')}
+  const images=validateAIImages([...(value.attachments===undefined?[]:validateAIImages(value.attachments)),...(value.context.notesSnapshot===undefined?[]:value.context.notesSnapshot.images)])
+  if(value.action==='organize-notes'&&(value.attachments!==undefined||value.context.notesSnapshot!==undefined))throw Error('Organize notes accepts Text only')
+  const hasNotes = value.context.notesSnapshot!==undefined ? hasChatNotes(value.context.notesSnapshot) : (typeof value.context.note === 'string' && Boolean(value.context.note.trim()))
+  if (mode === 'page' && !images.length && !value.context.pageText.trim() && !(value.context.selection as string | undefined)?.trim()) throw new Error('Select text or wait for the current PDF page text before asking AI.')
+  if (mode === 'notes' && !hasNotes && !images.length) throw new Error('Write a text note before asking AI about notes.')
+  if ((mode === 'notes' || mode === 'paper-notes') && typeof value.context.note !== 'string' && value.context.notesSnapshot===undefined && !images.length) throw new Error('Notes context requires a text note')
+  if (mode === 'paper' && !hasPaperText && !images.length) throw new Error('This paper has no extracted text. OCR is not available.')
+  if (mode === 'paper-notes' && !hasPaperText && !hasNotes && !images.length) throw new Error('This paper has no extracted text and the notes are empty.')
   if (!Array.isArray(value.history) || value.history.length > 100) throw new Error('Invalid chat history')
   for (const message of value.history) {
     object(message); text(message.content, 200_000)
@@ -82,7 +87,7 @@ export function validateMarks(value: unknown): asserts value is ReadingMarks {
     if (!Number.isInteger(highlight.page) || (highlight.page as number) < 1 || (highlight.page as number) > 100_000) throw new Error('Invalid highlight page')
     text(highlight.quote, 20_000); text(highlight.comment, 20_000); timestamp(highlight.createdAt)
     characters += highlight.quote.length + highlight.comment.length
-    if (!['yellow', 'coral', 'mint'].includes(highlight.color as string)) throw new Error('Invalid highlight color')
+    if (!isHighlightColor(highlight.color)) throw new Error('Invalid highlight color')
     if (!Array.isArray(highlight.rects) || !highlight.rects.length || highlight.rects.length > 1000) throw new Error('Invalid highlight rectangles')
     rectangles += highlight.rects.length
     for (const rect of highlight.rects) {
@@ -104,7 +109,8 @@ export function validateMarks(value: unknown): asserts value is ReadingMarks {
 
 export const SUMMARY_SECTION_IDS = ['keywords', 'overview', 'background', 'methods', 'results', 'limitations'] as const
 export function validateSummaryRequest(value: unknown): asserts value is SummaryRequest {
-  object(value); fields(value, ['requestId', 'paperId', 'pages']); validId(value.requestId); validId(value.paperId)
+  object(value); fields(value, ['requestId', 'paperId', 'pages', 'language']); validId(value.requestId); validId(value.paperId)
+  if (value.language !== undefined && value.language !== 'en' && value.language !== 'zh') throw new Error('Invalid summary language')
   if (!Array.isArray(value.pages) || value.pages.length < 1 || value.pages.length > 200) throw new Error('Summary requires between 1 and 200 PDF pages')
   let characters = 0
   for (const [index, page] of value.pages.entries()) {
@@ -123,15 +129,16 @@ export function validateSummarySections(value: unknown, coveredPages: ReadonlySe
   for (const section of value) {
     object(section); fields(section, ['id', 'title', 'content', 'pages'])
     if (!(SUMMARY_SECTION_IDS as readonly unknown[]).includes(section.id) || ids.has(section.id as string)) throw new Error('Invalid summary section identifier')
-    ids.add(section.id as string); text(section.title, 120); text(section.content, 10_000)
+    ids.add(section.id as string); text(section.title, 120); text(section.content, 60_000)
     if (!section.title.trim() || !section.content.trim()) throw new Error('Invalid empty summary section')
     characters += section.content.length
     pageReferences(section.pages, coveredPages, 'Invalid summary source page: cite only pages with extracted text')
   }
-  if (characters > 36_000) throw new Error('Summary sections exceed the text limit')
+  if (characters > 60_000) throw new Error('Summary sections exceed the text limit')
 }
 export function validateSummary(value: unknown, paperId: string): asserts value is PaperSummary {
-  object(value); fields(value, ['paperId', 'createdAt', 'model', 'pageCount', 'coveredPages', 'missingPages', 'sections'])
+  object(value); fields(value, ['paperId', 'createdAt', 'model', 'pageCount', 'coveredPages', 'missingPages', 'sections', 'language'])
+  if (value.language !== undefined && value.language !== 'en' && value.language !== 'zh') throw new Error('Invalid summary language')
   validId(value.paperId)
   if (value.paperId !== paperId) throw new Error('Invalid summary paper identity')
   timestamp(value.createdAt); validateSettings({ model: value.model })

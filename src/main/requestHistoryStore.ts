@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import type { AIRequestContext, AIRequestHistory, AIRequestOwner, AIRequestRecord, EffectiveAIRequest } from '../shared/requestTypes'
 import type { PaperStore } from './storage'
-import { REQUEST_MANIFEST_LIMIT, REQUEST_RECORD_LIMIT, REQUEST_SCOPE_LIMIT, REQUEST_SNAPSHOT_LIMIT, requestOwnerKey, requestUUID, validateEffectiveAIRequest, validateRequestContext, validateRequestHistory, validateRequestOwner } from './requestHistoryValidation'
+import { REQUEST_MANIFEST_LIMIT, REQUEST_RECORD_LIMIT, REQUEST_SCOPE_LIMIT, REQUEST_SNAPSHOT_LIMIT, requestOwnerKey, requestUUID, validateEffectiveContext, validateEffectiveAIRequest, validateRequestContext, validateRequestHistory, validateRequestOwner } from './requestHistoryValidation'
 
 type SavedMessage = { id: string; role: string; content: string; isDemo?: boolean }
 type BeginInput = { requestId: string; userMessageId: string; assistantMessageId: string; payload: EffectiveAIRequest; context: AIRequestContext; expectedUserContent: string; retryOf?: string }
@@ -106,6 +106,7 @@ export class RequestHistoryStore {
     if (sha(bytes) !== record.snapshotSha256) throw new Error('Original request snapshot hash changed; replay is unavailable')
     let payload: unknown
     try { payload = JSON.parse(bytes.toString('utf8')); validateEffectiveAIRequest(payload) } catch { throw new Error('Original request snapshot is invalid; replay is unavailable') }
+    validateEffectiveContext(payload,record.context,history.owner)
     if (payload.model !== record.model || (history.owner.scope === 'general') !== (payload.promptVersion === 'general-v1')) throw new Error('Original snapshot owner or model does not match its record')
     if (record.status === 'pending' && this.active.has(this.activeKey(history.owner, record.requestId))) throw new Error('The original request is still active and pending. Wait or cancel it before retrying.')
     return { record: structuredClone(record), payload, userContent }
@@ -114,6 +115,7 @@ export class RequestHistoryStore {
     validateRequestOwner(owner); requestUUID(input.requestId); requestUUID(input.userMessageId); requestUUID(input.assistantMessageId)
     if (input.retryOf !== undefined) requestUUID(input.retryOf)
     validateEffectiveAIRequest(input.payload); validateRequestContext(input.context)
+    validateEffectiveContext(input.payload,input.context,owner)
     if ((owner.scope === 'general') !== (input.payload.promptVersion === 'general-v1') || (owner.scope === 'general') !== (input.context.mode === 'general')) throw new Error('Request prompt and context do not match owner scope')
     if (typeof input.expectedUserContent !== 'string' || !input.expectedUserContent.trim() || input.expectedUserContent.length > 200000) throw new Error('Invalid expected saved user content')
     const scope = structuredClone(owner), snapshot = structuredClone(input)

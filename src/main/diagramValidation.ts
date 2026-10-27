@@ -1,3 +1,4 @@
+import { isHexColor } from '../shared/colors'
 import type { CanvasDiagram, MindMapDocument } from '../shared/diagramTypes'
 import { object } from './validation'
 import { canvasColors, validateCanvasPaperId } from './canvasValidation'
@@ -7,7 +8,7 @@ export const diagramColors = [...canvasColors, '#fffbf2', '#ffffff', 'transparen
 function fields(value: Record<string, unknown>, allowed: string[]) { if (Object.keys(value).some(key => !allowed.includes(key))) throw new Error('Invalid diagram/map fields') }
 function number(value: unknown, min: number, max: number): asserts value is number { if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error('Invalid diagram geometry') }
 function point(value: unknown) { object(value); fields(value, ['x', 'y']); number(value.x, 0, 1000); number(value.y, 0, 1200) }
-function appearance(value: Record<string, unknown>) { if (!canvasColors.includes(value.color as typeof canvasColors[number])) throw new Error('Invalid diagram color'); number(value.lineWidth, 1, 12) }
+function appearance(value: Record<string, unknown>) { if (!isHexColor(value.color)) throw new Error('Invalid diagram color'); number(value.lineWidth, 1, 12) }
 function endpoint(value: unknown) { object(value); fields(value, ['domain', 'objectId', 'anchor']); validateCanvasPaperId(value.objectId); if (!['base', 'shape'].includes(value.domain as string) || !['auto', 'top', 'right', 'bottom', 'left'].includes(value.anchor as string)) throw new Error('Invalid diagram endpoint') }
 export function emptyDiagram(paperId: string): CanvasDiagram { return { version: 1, paperId, shapes: [], arrows: [], connections: [] } }
 export function emptyMindMap(paperId: string): MindMapDocument { return { version: 1, paperId, nodes: [] } }
@@ -19,7 +20,7 @@ export function validateCanvasDiagram(value: unknown, paperId?: string): asserts
   const identity = (item: Record<string, unknown>) => { validateCanvasPaperId(item.id); if (ids.has(item.id)) throw new Error('Duplicate diagram identifier'); ids.add(item.id); appearance(item) }
   for (const item of value.shapes) {
     object(item); fields(item, ['id', 'kind', 'x', 'y', 'width', 'height', 'fill', 'color', 'lineWidth']); identity(item)
-    if (!['rectangle', 'circle'].includes(item.kind as string) || !diagramColors.includes(item.fill as typeof diagramColors[number])) throw new Error('Invalid diagram shape')
+    if (!['rectangle', 'circle'].includes(item.kind as string) || !(isHexColor(item.fill) || item.fill === 'transparent')) throw new Error('Invalid diagram shape')
     number(item.x, 0, 1000); number(item.y, 0, 1200); number(item.width, 20, 1000); number(item.height, 20, 1200)
     if (item.kind === 'circle' && item.width !== item.height) throw new Error('Diagram circle geometry requires equal width and height')
     if (item.x + item.width > 1000 || item.y + item.height > 1200) throw new Error('Diagram geometry extends outside canvas')

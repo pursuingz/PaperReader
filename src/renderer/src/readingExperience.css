@@ -4,9 +4,9 @@
 .chat-preview .message-label { color: #c16174; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .chat-preview .message-label span { font-size: 10px; margin-left: auto; }
 .answer-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 10px; color: #93616b; }
-.answer-actions button { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; padding: 5px 7px; color: #637086; background: transparent; cursor: pointer; font-size: 11px; }
-.answer-actions button:hover { color: #bd5066; background: #fff0f3; }
-.answer-actions button:focus-visible { outline: 2px solid #ed6376; outline-offset: 2px; }
+.answer-actions button, .answer-again-action { display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 5px; padding: 5px 7px; color: #637086; background: transparent; cursor: pointer; font-size: 11px; }
+.answer-actions button:hover, .answer-again-action:hover { color: #bd5066; background: #fff0f3; }
+.answer-actions button:focus-visible, .answer-again-action:focus-visible { outline: 2px solid #ed6376; outline-offset: 2px; }
 .message-actions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
 .message-actions .answer-actions { margin-top: 0; }
 .review-note-action, .note-adoption-undo button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #efdae0; border-radius: 6px; padding: 5px 8px; color: #a05265; background: #fff8fa; font: inherit; font-size: 11px; cursor: pointer; }

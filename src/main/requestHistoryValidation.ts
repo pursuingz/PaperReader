@@ -1,3 +1,7 @@
+import { validateAIImages, validateChatNotesSelection, validateChatNotesSnapshot } from './aiSourceValidation'
+import { validateNoteOrganizationRecipe } from './noteOrganization'
+import { validId } from './validation'
+import type { AIImageReference, ChatNotesSnapshot } from '../shared/aiSourceTypes'
 import type { AIRequestContext, AIRequestHistory, AIRequestOwner, EffectiveAIRequest } from '../shared/requestTypes'
 import { GENERAL_AI_SYSTEM_PROMPT, PAPER_AI_SYSTEM_PROMPT } from '../shared/aiPrompts'
 import { object, text, validateRequest, validateSettings } from './validation'
@@ -20,18 +24,20 @@ export function validateRequestOwner(value: unknown): asserts value is AIRequest
   else throw new Error('Invalid request owner scope')
 }
 export function validateRequestContext(value: unknown): asserts value is AIRequestContext {
-  object(value); requestFields(value, ['label', 'mode', 'action', 'page', 'selectionCharacters']); text(value.label, 300)
+  object(value); requestFields(value, ['label', 'mode', 'action', 'page', 'selectionCharacters', 'images', 'notesSelection']); text(value.label, 300)
+  if(value.images!==undefined){validateAIImages(value.images);if(value.mode==='general'||value.action==='organize-notes')throw Error('Invalid image context')}
+  if(value.notesSelection!==undefined){validateChatNotesSelection(value.notesSelection);if(!['notes','paper-notes'].includes(value.mode as string))throw Error('Invalid notes selection context')}
   if (!value.label.trim() || !['page', 'paper', 'notes', 'paper-notes', 'general'].includes(value.mode as string) || !['ask', 'organize-notes'].includes(value.action as string)) throw new Error('Invalid request context')
   if (value.page !== null && (!Number.isSafeInteger(value.page) || (value.page as number) < 1 || (value.page as number) > 100000)) throw new Error('Invalid request context page')
   if (!Number.isSafeInteger(value.selectionCharacters) || (value.selectionCharacters as number) < 0 || (value.selectionCharacters as number) > 30000) throw new Error('Invalid request selection size')
   if (value.mode === 'general' && (value.page !== null || value.action !== 'ask' || value.selectionCharacters !== 0)) throw new Error('Invalid general request context')
   if (value.action === 'organize-notes' && value.mode !== 'notes') throw new Error('Invalid notes organization context')
 }
-function validatePaperBody(content: string) {
+function validatePaperBody(content: string, extras?:{images:AIImageReference[];notesSnapshot?:ChatNotesSnapshot}) {
   let body: unknown
   try { body = JSON.parse(content) } catch { throw new Error('Invalid paper request body') }
   object(body); requestFields(body, ['contextMode', 'paperTitle', 'sources', 'question']); object(body.sources)
-  requestFields(body.sources, ['page', 'selection', 'pages', 'pageCount', 'coveredPages', 'missingPages', 'note'])
+  requestFields(body.sources, ['page', 'selection', 'pages', 'pageCount', 'coveredPages', 'missingPages', 'note', ...(extras?['notesSnapshot','imageSources']:[])])
   const sources = body.sources
   if (sources.page !== undefined) { object(sources.page); requestFields(sources.page, ['page', 'text']) }
   if (sources.pages !== undefined) {
@@ -42,14 +48,35 @@ function validatePaperBody(content: string) {
     if (sources.pageCount !== sources.pages.length || JSON.stringify(sources.coveredPages) !== JSON.stringify(covered) || JSON.stringify(sources.missingPages) !== JSON.stringify(missing)) throw new Error('Invalid paper page coverage')
   } else if (sources.pageCount !== undefined || sources.coveredPages !== undefined || sources.missingPages !== undefined) throw new Error('Invalid paper page coverage')
   const mode = body.contextMode
-  if (mode === 'page' && (sources.pages !== undefined || sources.note !== undefined || !sources.page)) throw new Error('Invalid page request sources')
+  if (mode === 'page' && (sources.pages !== undefined || sources.note !== undefined || sources.notesSnapshot!==undefined || !sources.page)) throw new Error('Invalid page request sources')
   if (mode !== 'page' && (sources.page !== undefined || sources.selection !== undefined)) throw new Error('Invalid paper request sources')
-  if (mode === 'notes' && sources.pages !== undefined || mode === 'paper' && sources.note !== undefined) throw new Error('Invalid request sources')
-  validateRequest({ requestId: 'validation', paperId: 'validation', question: body.question, context: { mode, paperTitle: body.paperTitle, page: sources.page?.page ?? 1, pageText: sources.page?.text ?? '', ...(sources.selection === undefined ? {} : { selection: sources.selection }), ...(sources.pages === undefined ? {} : { pages: sources.pages }), ...(sources.note === undefined ? {} : { note: sources.note }) }, history: [] })
+  if (mode === 'notes' && sources.pages !== undefined || mode === 'paper' && (sources.note !== undefined||sources.notesSnapshot!==undefined)) throw new Error('Invalid request sources')
+  if(extras&&sources.imageSources!==undefined&&JSON.stringify(sources.imageSources)!==JSON.stringify(extras.images))throw Error('Frozen image provenance mismatch')
+  if(extras&&JSON.stringify(sources.notesSnapshot)!==JSON.stringify(extras.notesSnapshot))throw Error('Frozen notes source mismatch')
+  validateRequest({ ...(extras?{attachments:extras.images}:{}), requestId: 'validation', paperId: 'validation', question: body.question, context: { mode, paperTitle: body.paperTitle, page: sources.page?.page ?? 1, pageText: sources.page?.text ?? '', ...(sources.selection === undefined ? {} : { selection: sources.selection }), ...(sources.pages === undefined ? {} : { pages: sources.pages }), ...(sources.note === undefined ? {} : { note: sources.note }), ...(sources.notesSnapshot===undefined?{}:{notesSnapshot:sources.notesSnapshot}) }, history: [] })
 }
 export function validateEffectiveAIRequest(value: unknown): asserts value is EffectiveAIRequest {
-  object(value); requestFields(value, ['version', 'promptVersion', 'model', 'messages', 'thinking', 'stream', 'tokenBudgets', 'maxCharacters'])
-  if (value.version !== 1 || !['paper-v1', 'general-v1'].includes(value.promptVersion as string)) throw new Error('Invalid request prompt version')
+  object(value); requestFields(value, ['version', 'promptVersion', 'model', 'messages', 'thinking', 'stream', 'tokenBudgets', 'maxCharacters', ...(value.version===2?['paperId','images','notesSnapshot','recipe']:[])])
+  if(value.version===1){if(!['paper-v1','general-v1'].includes(value.promptVersion as string))throw Error('Invalid request prompt version')}
+  else if(value.version===2){
+    if(!['paper-v2','organization-v2'].includes(value.promptVersion as string))throw Error('Invalid request prompt version')
+    validId(value.paperId);const refs=validateAIImages(value.images);if(refs.length!==(value.images as unknown[]).length)throw Error('Duplicate frozen image references')
+    if(value.notesSnapshot!==undefined){validateChatNotesSnapshot(value.notesSnapshot);for(const ref of value.notesSnapshot.images)if(!refs.some(r=>JSON.stringify(r)===JSON.stringify(ref)))throw Error('Missing frozen notes image')}
+    if(value.promptVersion==='organization-v2'){
+      const recipe=validateNoteOrganizationRecipe(value.recipe)
+      object(value.recipe);requestFields(value.recipe,['version','processingVersion','source','blocks','prompts','limits'])
+      object(value.recipe.prompts);requestFields(value.recipe.prompts,['system','plan','organize','repair'])
+      object(value.recipe.limits);requestFields(value.recipe.limits,Object.keys(recipe.limits))
+      if(!Array.isArray(value.recipe.blocks))throw Error('Invalid organization recipe blocks')
+      for(const block of value.recipe.blocks){object(block);requestFields(block,['id','text','start','end'])}
+      if(refs.length||value.notesSnapshot!==undefined)throw Error('Organization is Text only')
+      if(!Array.isArray(value.messages)||value.messages.length!==2||value.messages[0]?.content!==recipe.prompts.system)throw Error('Organization recipe system or message envelope mismatch')
+      const body=JSON.parse(value.messages.at(-1)?.content??'{}')
+      if(body.contextMode!=='notes'||body.sources?.note!==recipe.source)throw Error('Organization source mismatch')
+      object(body.sources);requestFields(body.sources,['note'])
+    }
+    else if(value.recipe!==undefined)throw Error('Unexpected organization recipe')
+  }else throw Error('Invalid request prompt version')
   validateSettings({ model: value.model }); object(value.thinking); requestFields(value.thinking, ['type'])
   if (value.thinking.type !== 'disabled' || typeof value.stream !== 'boolean' || !Array.isArray(value.tokenBudgets) || value.tokenBudgets.length !== 2 || value.tokenBudgets[0] !== 4096 || value.tokenBudgets[1] !== 8192) throw new Error('Invalid request token budget or thinking policy')
   if (!Number.isSafeInteger(value.maxCharacters) || (value.maxCharacters as number) < 1 || (value.maxCharacters as number) > 200000) throw new Error('Invalid response character limit')
@@ -59,12 +86,13 @@ export function validateEffectiveAIRequest(value: unknown): asserts value is Eff
     if (index === 0 ? message.role !== 'system' : !['user', 'assistant'].includes(message.role as string)) throw new Error('Invalid request message role')
   }
   const expectedPrompt = value.promptVersion === 'paper-v1' ? PAPER_AI_SYSTEM_PROMPT : GENERAL_AI_SYSTEM_PROMPT
-  if (value.messages[0].content !== expectedPrompt || value.messages.at(-1)!.role !== 'user') throw new Error('Invalid canonical system prompt')
+  if ((value.version===1&&value.messages[0].content !== expectedPrompt) || !value.messages[0].content.trim() || value.messages.at(-1)!.role !== 'user') throw new Error('Invalid canonical system prompt')
   let recentCharacters = 0
   for (const message of value.messages.slice(1, -1)) { text(message.content, 200000); recentCharacters += message.content.length }
   if (recentCharacters > 60000) throw new Error('Invalid recent history character limit')
   const last = value.messages.at(-1)!.content
-  if (value.promptVersion === 'paper-v1') validatePaperBody(last)
+  if(value.version===2) validatePaperBody(last,{images:value.images as AIImageReference[],notesSnapshot:value.notesSnapshot as ChatNotesSnapshot|undefined})
+  else if (value.promptVersion === 'paper-v1') validatePaperBody(last)
   else { text(last, 20000); if (!last.trim() || last !== last.trim()) throw new Error('Invalid general question') }
   if (Buffer.byteLength(JSON.stringify(value), 'utf8') > REQUEST_SNAPSHOT_LIMIT) throw new Error('Request snapshot exceeds the 4 MiB limit')
 }
@@ -90,4 +118,11 @@ export function validateRequestHistory(value: unknown, owner: AIRequestOwner): a
     }
     requests.set(record.requestId as string, record)
   }
+}
+
+export function validateEffectiveContext(payload:EffectiveAIRequest,context:AIRequestContext,owner:AIRequestOwner):void {
+ if(payload.version!==2)return
+ if(owner.scope!=='paper'||payload.paperId!==owner.paperId)throw Error('Snapshot paper owner does not match')
+ const body=JSON.parse(payload.messages.at(-1)!.content)
+ if(body.contextMode!==context.mode||(payload.promptVersion==='organization-v2')!==(context.action==='organize-notes')||JSON.stringify(context.images??[])!==JSON.stringify(payload.images)||JSON.stringify(context.notesSelection)!==JSON.stringify(payload.notesSnapshot?.selection))throw Error('Snapshot source context does not match its historical display')
 }

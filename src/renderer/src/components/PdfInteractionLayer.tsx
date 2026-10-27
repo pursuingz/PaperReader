@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Crop, X } from 'lucide-react'
-import type { NormalizedRect } from '../../../shared/types'
+import { Check, Crop, X, MessageCircle, Copy, Download } from 'lucide-react'
+import type { NormalizedRect, PdfCaptureAction } from '../../../shared/types'
 import { captureRect, panScroll, shouldDismissPdfCapture, type PdfInteractionMode, type Point } from '../pdfInteraction'
 import { positionSelectionToolbar } from '../selectionMenu'
 import './pdf-interaction.css'
@@ -11,7 +11,7 @@ interface Props {
   page: number
   ready: boolean
   scrollElement?: HTMLElement | null
-  onConfirm(rect: NormalizedRect): Promise<boolean>
+  onConfirm(rect: NormalizedRect, action?:PdfCaptureAction): Promise<boolean>
   onCancel(): void
 }
 type Gesture = { id: number; start: Point; bounds: DOMRect; pan?: Point & { left: number; top: number } }
@@ -92,10 +92,10 @@ export default function PdfInteractionLayer({ mode, page, ready, scrollElement, 
     release(); setDragging(false)
   }
   function lost(event: PointerEvent<HTMLDivElement>) { if (gesture.current?.id === event.pointerId) cancel() }
-  async function confirm() {
+  async function confirm(action:PdfCaptureAction='canvas') {
     if (!rect || !ready || adding.current) return
     adding.current = true; setBusy(true); setError('')
-    try { const accepted = await callbacks.current.onConfirm({ ...rect }); if (mounted.current && accepted) setRect(null) }
+    try { const accepted = await callbacks.current.onConfirm({ ...rect },action); if (mounted.current && accepted && (action==='canvas'||action==='chat')) setRect(null) }
     catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : 'The PDF region could not be added. Retry the capture.') }
     finally { if (mounted.current) { adding.current = false; setBusy(false) } }
   }
@@ -108,7 +108,7 @@ export default function PdfInteractionLayer({ mode, page, ready, scrollElement, 
       {!rect && error && <div className="pdf-capture-error" role="status">{error}</div>}
     </div>
     {rect && !dragging && position && createPortal(<div ref={controls} className="pdf-capture-confirm" role="toolbar" aria-label="PDF capture actions" style={position} onMouseDown={event => { event.preventDefault(); event.stopPropagation() }} onMouseUp={event => event.stopPropagation()}>
-      <span>Page {page}</span><button type="button" aria-label="Add PDF capture to Canvas" disabled={!ready || busy} onClick={() => void confirm()}><Check size={13}/>{busy ? 'Adding…' : 'Add to Canvas'}</button><button type="button" aria-label="Cancel PDF capture" disabled={busy} onClick={cancel}><X size={13}/>Cancel</button>
+      <span>Page {page}</span><button type="button" aria-label="Add PDF capture to Canvas" disabled={!ready || busy} onClick={() => void confirm('canvas')}><Check size={13}/>{busy ? 'Adding…' : 'Add to Canvas'}</button><button type="button" aria-label="Add PDF capture to Chat" disabled={!ready||busy} onClick={()=>void confirm('chat')}><MessageCircle size={13}/>Add to Chat</button><button type="button" aria-label="Copy PDF capture image" disabled={!ready||busy} onClick={()=>void confirm('copy')}><Copy size={13}/>Copy</button><button type="button" aria-label="Save PDF capture image" disabled={!ready||busy} onClick={()=>void confirm('save')}><Download size={13}/>Save PNG</button><button type="button" aria-label="Cancel PDF capture" disabled={busy} onClick={cancel}><X size={13}/>Cancel</button>
       {error && <p role="alert">{error}</p>}
     </div>, document.body)}
   </>

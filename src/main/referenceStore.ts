@@ -51,9 +51,13 @@ export class ReferenceStore {
         if (!(error instanceof Error) || !/Local data is damaged/.test(error.message)) throw error
       }
       const records = buildReferenceRecords(source)
+      const identity=(item:typeof records[number])=>JSON.stringify([item.segmentation,item.rawText,item.pages,item.fields])
+      const previousGroups=new Map<string,typeof records>(),counts=new Map<string,number>()
+      for(const record of previous?.records??[]){const key=identity(record);previousGroups.set(key,[...(previousGroups.get(key)??[]),record])}
+      for(const record of records){const key=identity(record);counts.set(key,(counts.get(key)??0)+1)}
       for (const record of records) {
-        const old = previous?.records.find(item => item.id === record.id && item.rawText === record.rawText && JSON.stringify(item.pages) === JSON.stringify(record.pages) && JSON.stringify(item.fields) === JSON.stringify(record.fields))
-        if (old) record.verification = old.verification
+        const key=identity(record),matches=previousGroups.get(key)??[]
+        if(matches.length===1&&counts.get(key)===1){record.id=matches[0].id;record.verification=matches[0].verification}
       }
       return this.write({ paperId, version: 1, sourceRevision: sourceRevision(source), sourceCreatedAt: source.createdAt, builtAt: new Date().toISOString(), sourceLimitReached: source.limitReached, records })
     })

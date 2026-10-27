@@ -1,9 +1,9 @@
 import type { AIRequestOwner, AIRequestContext, AIRequestRecord, EffectiveAIRequest, RecordedAIRequest, RetryAIRequest, AIResult, GeneralAIRequest, GeneralAIResult, GeneralChatState, AIReplayResult } from '../shared/types'
 import { NOTE_ORGANIZATION_PREFIX, ORGANIZE_NOTES_DISPLAY_QUESTION } from '../shared/aiPrompts'
 import { object, validateRequest } from './validation'
-import { requestFields, requestUUID, requestOwnerKey, validateRequestOwner, validateEffectiveAIRequest } from './requestHistoryValidation'
+import { requestFields, requestUUID, requestOwnerKey, validateRequestOwner, validateEffectiveContext, validateEffectiveAIRequest } from './requestHistoryValidation'
 import { validateGeneralAIRequest } from './generalChatValidation'
-import { buildPaperEffectiveRequest, buildGeneralEffectiveRequest, executeEffectiveAI, type EffectiveAIProgress } from './deepseek'
+import { buildPaperEffectiveRequest, buildGeneralEffectiveRequest, executeEffectiveAI, type EffectiveAIProgress, type AIImageResolver } from './deepseek'
 
 export interface RecordedMessage { id: string; role: 'user'|'assistant'; content: string; isDemo?: boolean }
 interface HistoryAccess {
@@ -12,7 +12,7 @@ interface HistoryAccess {
   markResponseReady(owner:AIRequestOwner,id:string,savedAnswer:string):Promise<void>
   settle(owner:AIRequestOwner,id:string,status:'failed'|'cancelled'):Promise<void>
 }
-interface Options { history: HistoryAccess; readMessages(owner:AIRequestOwner):Promise<RecordedMessage[]>; readGeneral():Promise<GeneralChatState>; fetcher?:typeof fetch }
+interface Options { history: HistoryAccess; readMessages(owner:AIRequestOwner):Promise<RecordedMessage[]>; readGeneral():Promise<GeneralChatState>; fetcher?:typeof fetch; readAIImage?:AIImageResolver }
 export function validateRecordedAIRequest(value:unknown):asserts value is RecordedAIRequest {
   object(value);requestFields(value,['request','userMessageId','assistantMessageId']);validateRequest(value.request)
   requestUUID(value.request.requestId);requestUUID(value.userMessageId);requestUUID(value.assistantMessageId)
@@ -43,10 +43,11 @@ export class RecordedAIService {
   private async dispatch(owner:AIRequestOwner,input:{requestId:string;userMessageId:string;assistantMessageId:string;payload:EffectiveAIRequest;context:AIRequestContext;expectedUserContent:string;retryOf?:string},key:string,signal:AbortSignal,onProgress?:(value:EffectiveAIProgress)=>void):Promise<{content:string;historyWarning?:string}>{
     if(!key)throw new Error('Open Settings and enter your DeepSeek API key before asking AI.')
     cancellation(signal);validateEffectiveAIRequest(input.payload)
+    validateEffectiveContext(input.payload,input.context,owner)
     await this.requireMessages(owner,input.userMessageId,input.assistantMessageId,input.expectedUserContent);cancellation(signal)
     try{
       await this.options.history.begin(owner,input,signal);cancellation(signal)
-      const content=await executeEffectiveAI(input.payload,key,signal,this.options.fetcher??fetch,onProgress);cancellation(signal)
+      const content=await executeEffectiveAI(input.payload,key,signal,this.options.fetcher??fetch,onProgress,this.options.readAIImage);cancellation(signal)
       const displayed=input.context.action==='organize-notes'?NOTE_ORGANIZATION_PREFIX+content:content
       try{await this.options.history.markResponseReady(owner,input.requestId,displayed)}catch{
         await this.options.history.settle(owner,input.requestId,'failed').catch(()=>{})
@@ -59,7 +60,8 @@ export class RecordedAIService {
     validateRecordedAIRequest(value)
     const request=structuredClone(value.request),owner:AIRequestOwner={scope:'paper',paperId:request.paperId},mode=request.context.mode??'page'
     const payload=buildPaperEffectiveRequest(request,model,true)
-    const context:AIRequestContext={label:request.context.paperTitle.slice(0,500),mode,action:request.action??'ask',page:mode==='page'?request.context.page:null,selectionCharacters:mode==='page'?(request.context.selection?.length??0):0}
+    const context:AIRequestContext={label:request.context.paperTitle.slice(0,300),mode,action:request.action??'ask',page:mode==='page'?request.context.page:null,selectionCharacters:mode==='page'?(request.context.selection?.length??0):0}
+    if(payload.version===2){if(payload.images.length)context.images=structuredClone(payload.images);if(payload.notesSnapshot)context.notesSelection=structuredClone(payload.notesSnapshot.selection)}
     return this.withOwner(owner,async()=>({requestId:request.requestId,paperId:request.paperId,...await this.dispatch(owner,{requestId:request.requestId,userMessageId:value.userMessageId,assistantMessageId:value.assistantMessageId,payload,context,expectedUserContent:request.action==='organize-notes'?ORGANIZE_NOTES_DISPLAY_QUESTION:request.question},key,signal,onProgress)}))
   }
   async askGeneral(value:GeneralAIRequest,model:string,key:string,signal:AbortSignal,onProgress?:(value:EffectiveAIProgress)=>void):Promise<GeneralAIResult>{

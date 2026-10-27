@@ -1,23 +1,18 @@
-import type { LibraryMetadata, Paper, PaperMetadata } from '../../shared/types'
+import type { LibraryMetadata, Paper, PaperMetadata, LibraryActivity } from '../../shared/types'
 
 export function overlayLibraryMetadata(papers: Paper[], metadata: LibraryMetadata): Paper[] {
   return papers.map(paper => applyPaperMetadata(paper, metadata))
 }
 export function applyPaperMetadata(paper: Paper, metadata: LibraryMetadata): Paper { return !paper.isDemo && Object.hasOwn(metadata, paper.id) ? { ...paper, ...metadata[paper.id] } : paper }
-function localDateKey(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
-export function groupRecentLibrary(papers: Paper[], now = new Date()): Array<{ id: string; name: string; papers: Paper[] }> {
-  const today = localDateKey(now), yesterdayDate = new Date(now)
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
-  const yesterday = localDateKey(yesterdayDate), groups = new Map<string, { id: string; name: string; papers: Paper[] }>()
-  const dated = papers.filter(paper => !paper.isDemo).map(paper => ({ paper, date: new Date(paper.importedAt) })).sort((left, right) => (Number.isFinite(right.date.getTime()) ? right.date.getTime() : -Infinity) - (Number.isFinite(left.date.getTime()) ? left.date.getTime() : -Infinity))
-  for (const { paper, date } of dated) {
-    const valid = Number.isFinite(date.getTime()), key = valid ? localDateKey(date) : 'unknown'
-    const name = !valid ? 'Unknown import date' : key === today ? 'Today' : key === yesterday ? 'Yesterday' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    if (!groups.has(key)) groups.set(key, { id: `date-${key}`, name, papers: [] })
-    groups.get(key)!.papers.push(paper)
-  }
-  const demo = papers.filter(paper => paper.isDemo)
-  return [...groups.values(), ...(demo.length ? [{ id: 'demo', name: 'Demonstration', papers: demo }] : [])]
+/** Time buckets use successful opens and local calendar boundaries, including DST. */
+export function groupRecentLibrary(papers:Paper[],now=new Date(),activity:LibraryActivity={version:1,lastOpenedAt:{}}):Array<{id:string;name:string;papers:Paper[]}>{
+ const today=new Date(now);today.setHours(0,0,0,0);const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1)
+ const recent=new Date(today);recent.setDate(recent.getDate()-2);const week=new Date(today);week.setDate(week.getDate()-((week.getDay()+6)%7));const month=new Date(today);month.setDate(1)
+ const groups=[['today','Today'],['recent','Last 3 days'],['week','This week'],['month','This month'],['earlier','Earlier']].map(([id,name])=>({id:'time-'+id,name,papers:[] as Paper[]}))
+ const opened=(paper:Paper)=>{const text=Object.hasOwn(activity.lastOpenedAt,paper.id)?activity.lastOpenedAt[paper.id]:undefined;const value=text?Date.parse(text):NaN;return Number.isFinite(value)?value:-Infinity}
+ const sorted=papers.filter(p=>!p.isDemo).map(p=>({paper:p,time:opened(p)})).sort((a,b)=>b.time-a.time)
+ for(const {paper,time} of sorted){const bucket=time>=today.getTime()&&time<tomorrow.getTime()?0:time>=recent.getTime()&&time<today.getTime()?1:time>=week.getTime()&&time<today.getTime()?2:time>=month.getTime()&&time<today.getTime()?3:4;groups[bucket].papers.push(paper)}
+ const demo=papers.filter(p=>p.isDemo);return [...groups.filter(g=>g.papers.length),...(demo.length?[{id:'demo',name:'Demonstration',papers:demo}]:[])]
 }
 export function paperInformationInput(titleInput: string, authorsInput: string, yearInput: string): PaperMetadata {
   const title = titleInput.trim(), authors = authorsInput.trim(), yearText = yearInput.trim()

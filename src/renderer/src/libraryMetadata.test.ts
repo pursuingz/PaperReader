@@ -8,18 +8,18 @@ function paper(id: string, importedAt: string, isDemo = false): Paper { return {
 test('recent groups follow local calendar dates across midnight rather than elapsed 24-hour intervals', () => {
   const now = new Date(2026, 9, 6, 0, 5)
   const values = [paper('yesterday', new Date(2026, 9, 5, 23, 58).toISOString()), paper('today-older', new Date(2026, 9, 6, 0, 1).toISOString()), paper('today-newer', new Date(2026, 9, 6, 0, 3).toISOString()), paper('earlier', new Date(2026, 9, 3, 15, 0).toISOString())]
-  const groups = groupRecentLibrary(values, now)
-  assert.deepEqual(groups.slice(0, 2).map(group => group.name), ['Today', 'Yesterday'])
+  const groups = groupRecentLibrary(values, now, {version:1,lastOpenedAt:Object.fromEntries(values.map(p=>[p.id,p.importedAt]))})
+  assert.deepEqual(groups.slice(0, 2).map(group => group.name), ['Today', 'Last 3 days'])
   assert.deepEqual(groups[0].papers.map(value => value.id), ['today-newer', 'today-older'])
   assert.deepEqual(groups[1].papers.map(value => value.id), ['yesterday'])
-  assert.equal(groups[2].name, new Date(2026, 9, 3).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
+  assert.equal(groups[2].name, 'This month')
   assert.deepEqual(values.map(value => value.id), ['yesterday', 'today-older', 'today-newer', 'earlier'])
 })
 
 test('recent grouping keeps demo distinct, malformed dates readable and empty results empty', () => {
   const now = new Date(2026, 9, 6, 10)
-  const groups = groupRecentLibrary([paper('broken', 'nonsense'), paper('demo-workspace', now.toISOString(), true), paper('imported', now.toISOString())], now)
-  assert.deepEqual(groups.map(group => group.name), ['Today', 'Unknown import date', 'Demonstration'])
+  const groups = groupRecentLibrary([paper('broken', 'nonsense'), paper('demo-workspace', now.toISOString(), true), paper('imported', now.toISOString())], now, {version:1,lastOpenedAt:{imported:now.toISOString(),broken:'nonsense'}})
+  assert.deepEqual(groups.map(group => group.name), ['Today', 'Earlier', 'Demonstration'])
   assert.deepEqual(groups[2].papers.map(value => value.id), ['demo-workspace'])
   assert.deepEqual(groupRecentLibrary([], now), [])
 })

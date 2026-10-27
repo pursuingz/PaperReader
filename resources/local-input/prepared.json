@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "runner": "v1.8.4",
+  "tasksVision": "0.10.32",
+  "files": [
+    {
+      "path": "whisper/ggml-base.dll",
+      "bytes": 549376,
+      "sha256": "138a2b1a03b7dd757d764f60b39a8b32a08137e21fce4d3d78fbac6c5e716f9d"
+    },
+    {
+      "path": "whisper/ggml-cpu.dll",
+      "bytes": 774144,
+      "sha256": "9a74d977527dbac38d96900fd7ce422aebbf96001aff5be6a05d7c547dcb9bcb"
+    },
+    {
+      "path": "whisper/ggml.dll",
+      "bytes": 67072,
+      "sha256": "9f2b124cbe1d002dc25de9a5ff9813c4fec7ef9f3bb9f41035fc6b46fb77bfa0"
+    },
+    {
+      "path": "whisper/SDL2.dll",
+      "bytes": 2500096,
+      "sha256": "de23db1694a3c7a4a735e7ecd3d214b2023cc2267922c6c35d30c7fc7370d677"
+    },
+    {
+      "path": "whisper/whisper-cli.exe",
+      "bytes": 485888,
+      "sha256": "d4c598cf97de103f888d1a53b8abddc85bf27ab752f785ca69318cedc8a2cf64"
+    },
+    {
+      "path": "whisper/whisper.dll",
+      "bytes": 483840,
+      "sha256": "ce1958796ebd9d03aafc56cdc2f04c21f214a9c7623889a0a23bc6c162976e87"
+    },
+    {
+      "path": "vision/hand_landmarker.task",
+      "bytes": 7819105,
+      "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
+    },
+    {
+      "path": "vision/wasm/vision_wasm_internal.js",
+      "bytes": 204816,
+      "sha256": "6f6b86509cf9e163ea1cfec7edc8cf53732699c04781e4c21c557c1ba402310e"
+    },
+    {
+      "path": "vision/wasm/vision_wasm_internal.wasm",
+      "bytes": 11453626,
+      "sha256": "cb3ec20026a9aecc2a81a93c25630ceb5389297ddb7a5f0bd61dd09cde606b9b"
+    },
+    {
+      "path": "vision/wasm/vision_wasm_nosimd_internal.js",
+      "bytes": 204669,
+      "sha256": "9f8fc960e363f0fb2f42f7937b97ae9cf9a5630490f71031fa90caa9bb121938"
+    },
+    {
+      "path": "vision/wasm/vision_wasm_nosimd_internal.wasm",
+      "bytes": 10647962,
+      "sha256": "924274fcd5ac8985f6570a8573e7971b7bd2d580ba1b8f3beb0ba8f95db6347c"
+    },
+    {
+      "path": "licenses/mediapipe-Apache-2.0.txt",
+      "bytes": 12331,
+      "sha256": "8707eef0533987efc5b155d64761eeb6e20793f50b9bd1a68dad1cf4719d0ed8"
+    },
+    {
+      "path": "licenses/whisper-MIT.txt",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "path": "licenses/whisper-model-MIT.txt",
+      "bytes": 1063,
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+    }
+  ]
+}

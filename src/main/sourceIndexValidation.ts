@@ -22,8 +22,8 @@ function pages(value: unknown, maximum: number): number[] {
 }
 export function validateSourceIndex(value: unknown, paperId: string): asserts value is PaperSourceIndex {
   sourcePaperId(paperId); object(value)
-  fields(value, ['paperId', 'extractorVersion', 'createdAt', 'pageCount', 'indexedPages', 'textlessPages', 'failedPages', 'limitReached', 'entries'])
-  if (value.paperId !== paperId || value.extractorVersion !== 1) throw new Error('Invalid source index identity or extractor version')
+  fields(value, ['paperId', 'extractorVersion', 'createdAt', 'pageCount', 'indexedPages', 'textlessPages', 'failedPages', 'limitReached', 'entries', 'issues'])
+  if (value.paperId !== paperId || ![1,2].includes(value.extractorVersion as number)) throw new Error('Invalid source index identity or extractor version')
   boundedText(value.createdAt, 40)
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.createdAt) || !Number.isFinite(Date.parse(value.createdAt))) throw new Error('Invalid source index date')
   const count = value.pageCount
@@ -42,6 +42,13 @@ export function validateSourceIndex(value: unknown, paperId: string): asserts va
     characters += entry.text.length
     const sourcePages = pages(entry.pages, count)
     if (!sourcePages.length || sourcePages.some(page => !indexed.has(page))) throw new Error('Source entries must cite indexed readable pages')
+  }
+  if(value.issues!==undefined){
+    if(!Array.isArray(value.issues)||value.issues.length>1003)throw Error('Invalid source index issues')
+    for(const issue of value.issues){object(issue);fields(issue,['kind','entryId']);if(!['page-limit','character-limit','candidate-limit','entry-truncated'].includes(issue.kind as string))throw Error('Invalid source issue kind')
+      if(issue.kind==='entry-truncated'){if(typeof issue.entryId!=='string'||!ids.has(issue.entryId))throw Error('Invalid truncated source entry')}
+      else if(issue.entryId!==undefined||!value.limitReached)throw Error('Invalid source scan issue')
+    }
   }
   if (characters > 240000) throw new Error('Source index text limit exceeded')
 }

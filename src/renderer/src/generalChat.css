@@ -43,7 +43,7 @@
 .general-chat-feedback button { color: #d85669; font-size: 9px; text-decoration: underline; padding: 3px 0; margin-right: 9px; }
 .general-chat-history-error { color: #a15462; overflow-wrap: anywhere; }
 .general-chat-connect { display: block; }
-.general-chat-composer { flex-shrink: 0; display: grid; grid-template-columns: minmax(0,1fr) 30px; gap: 6px 9px; padding: 11px 12px 8px; margin: 7px 12px 0; border: 1px solid #e2e7ef; border-radius: 8px; background: #fff; }
+.general-chat-composer { flex-shrink: 0; display: grid; grid-template-columns: minmax(0,1fr) 190px 30px; gap: 6px 9px; padding: 11px 12px 8px; margin: 7px 12px 0; border: 1px solid #e2e7ef; border-radius: 8px; background: #fff; }
 .general-chat-composer textarea { width: 100%; min-width: 0; resize: vertical; max-height: 110px; min-height: 42px; border: 0; background: none; font-size: 11px; line-height: 1.65; padding: 1px 2px; }
 .general-chat-composer textarea::placeholder { color: #a6b0bd; }
 .general-chat-composer > button { align-self: end; height: 30px; width: 30px; border-radius: 7px; }
